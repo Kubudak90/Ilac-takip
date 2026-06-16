@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { Medication } from '../types';
 import { colors, fontSize, spacing } from '../theme';
 import { Card, Pill, StatusBadge } from './ui';
@@ -11,7 +12,7 @@ import {
   levelForDays,
   stockRunOutDate,
 } from '../utils/status';
-import { daysBetween, formatTR, humanDays, parseISO, today } from '../utils/date';
+import { daysBetween, formatDose, formatTR, humanDays, parseISO, today } from '../utils/date';
 
 export function MedicationCard({
   med,
@@ -42,11 +43,12 @@ export function MedicationCard({
       </View>
 
       <View style={styles.metaRow}>
-        <Pill text={`Günde ${med.dailyDose} adet`} />
+        <Pill text={`Günde ${formatDose(med.dailyDose)} adet`} />
         <Pill text={`Stok: ${med.stockUnits} adet`} />
         {med.doseTimes && med.doseTimes.length > 0 ? (
           <Pill
-            text={`⏰ ${med.doseTimes.join(', ')}`}
+            icon="time-outline"
+            text={med.doseTimes.join(', ')}
             color={colors.primaryDark}
             bg={colors.primaryLight}
           />
@@ -83,11 +85,17 @@ export function MedicationCard({
 
       {med.expiryDate ? <ExpiryLine iso={med.expiryDate} /> : null}
 
-      {med.notes ? <Text style={styles.notes}>📝 {med.notes}</Text> : null}
+      {med.notes ? (
+        <View style={styles.notesRow}>
+          <Ionicons name="create-outline" size={14} color={colors.textMuted} style={{ marginTop: 2 }} />
+          <Text style={styles.notes}>{med.notes}</Text>
+        </View>
+      ) : null}
 
       {onRefill ? (
         <Pressable onPress={onRefill} style={styles.refillBtn}>
-          <Text style={styles.refillText}>✓ İlaç yazdırdım / stok ekle</Text>
+          <Ionicons name="checkmark-circle-outline" size={18} color={colors.ok} style={{ marginRight: 6 }} />
+          <Text style={styles.refillText}>İlaç yazdırdım / stok ekle</Text>
         </Pressable>
       ) : null}
     </Card>
@@ -101,9 +109,16 @@ function ExpiryLine({ iso }: { iso: string }) {
   const near = days >= 0 && days <= 30;
   const color = expired ? colors.danger : near ? colors.warning : colors.textMuted;
   const label = expired
-    ? `⚠️ Son kullanma geçti (${formatTR(d)})`
+    ? `Son kullanma geçti (${formatTR(d)})`
     : `Son kullanma: ${formatTR(d)}`;
-  return <Text style={[styles.expiry, { color }]}>{label}</Text>;
+  return (
+    <View style={styles.expiryRow}>
+      {expired ? (
+        <Ionicons name="warning-outline" size={14} color={color} style={{ marginRight: 4 }} />
+      ) : null}
+      <Text style={[styles.expiry, { color }]}>{label}</Text>
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
@@ -119,21 +134,29 @@ const styles = StyleSheet.create({
   },
   dateNote: { fontSize: fontSize.sm, color: colors.textMuted, fontWeight: '600' },
   noReport: { fontSize: fontSize.sm, color: colors.textLight, fontStyle: 'italic' },
-  notes: {
+  notesRow: {
+    flexDirection: 'row',
+    gap: 6,
     marginTop: spacing.md,
-    fontSize: fontSize.sm,
-    color: colors.textMuted,
     backgroundColor: colors.bg,
     padding: spacing.sm,
     borderRadius: 8,
   },
-  expiry: { marginTop: spacing.sm, fontSize: fontSize.sm, fontWeight: '600' },
+  notes: {
+    flex: 1,
+    fontSize: fontSize.sm,
+    color: colors.textMuted,
+  },
+  expiryRow: { flexDirection: 'row', alignItems: 'center', marginTop: spacing.sm },
+  expiry: { fontSize: fontSize.sm, fontWeight: '600' },
   refillBtn: {
     marginTop: spacing.md,
     backgroundColor: colors.okBg,
     paddingVertical: spacing.md,
     borderRadius: 10,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
   },
   refillText: { color: colors.ok, fontWeight: '800', fontSize: fontSize.md },
 });

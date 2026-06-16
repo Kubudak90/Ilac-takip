@@ -1,5 +1,6 @@
 import React from 'react';
-import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useRouter } from 'expo-router';
 import { useData } from '@/store/DataContext';
 import {
   requestNotificationPermission,
@@ -14,6 +15,7 @@ const HOUR_OPTIONS = [8, 9, 10, 12, 18, 20];
 
 export default function SettingsScreen() {
   const { data, loading, updateSettings } = useData();
+  const router = useRouter();
 
   if (loading) return <Loading />;
   const s = data.settings;
@@ -22,10 +24,13 @@ export default function SettingsScreen() {
     if (v) {
       const granted = await requestNotificationPermission();
       if (!granted) {
+        // İzin yoksa anahtarı AÇIK bırakmak yanıltıcı olur — kapalı tut.
         Alert.alert(
           'Bildirim izni gerekli',
-          'Hatırlatma alabilmek için telefon ayarlarından İlaç Takip uygulamasına bildirim izni verin.',
+          'Hatırlatma alabilmek için telefon ayarlarından İlaç Takip uygulamasına bildirim izni verin. İzin verilene kadar hatırlatmalar kapalı kalır.',
         );
+        updateSettings({ notificationsEnabled: false });
+        return;
       }
     }
     updateSettings({ notificationsEnabled: v });
@@ -78,9 +83,25 @@ export default function SettingsScreen() {
         </Card>
       </Section>
 
+      <Section title="Yedekleme">
+        <Card>
+          <Text style={styles.help}>
+            Veriler yalnızca bu telefonda saklanır. Telefon kaybolursa veriler de
+            kaybolur. Düzenli olarak yedek alın.
+          </Text>
+          <Button
+            title="Yedekle / Geri Yükle"
+            icon="save-outline"
+            variant="secondary"
+            onPress={() => router.push('/yedek')}
+          />
+        </Card>
+      </Section>
+
       <Section title="Test">
         <Button
-          title="🔔 Test bildirimi gönder"
+          title="Test bildirimi gönder"
+          icon="notifications-outline"
           variant="secondary"
           onPress={async () => {
             const granted = await requestNotificationPermission();
@@ -112,12 +133,17 @@ function Chip({
   onPress: () => void;
 }) {
   return (
-    <Text
+    <Pressable
       onPress={onPress}
       style={[styles.chip, active ? styles.chipActive : styles.chipInactive]}
+      hitSlop={8}
+      accessibilityRole="button"
+      accessibilityState={{ selected: active }}
     >
-      {label}
-    </Text>
+      <Text style={[styles.chipText, { color: active ? colors.white : colors.primaryDark }]}>
+        {label}
+      </Text>
+    </Pressable>
   );
 }
 
@@ -126,15 +152,16 @@ const styles = StyleSheet.create({
   help: { fontSize: fontSize.sm, color: colors.textMuted, marginBottom: spacing.md },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   chip: {
-    paddingVertical: spacing.sm,
+    minHeight: 44,
+    paddingVertical: spacing.md,
     paddingHorizontal: spacing.lg,
     borderRadius: radius.pill,
-    fontSize: fontSize.md,
-    fontWeight: '700',
-    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  chipActive: { backgroundColor: colors.primary, color: colors.white },
-  chipInactive: { backgroundColor: colors.primaryLight, color: colors.primaryDark },
+  chipText: { fontSize: fontSize.md, fontWeight: '700' },
+  chipActive: { backgroundColor: colors.primary },
+  chipInactive: { backgroundColor: colors.primaryLight },
   footer: {
     textAlign: 'center',
     color: colors.textLight,

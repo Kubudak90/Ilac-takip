@@ -14,6 +14,13 @@ const LEVEL_LABEL: Record<StatusLevel, string> = {
   ok: 'Sorun yok',
 };
 
+const LEVEL_ORDER: Record<StatusLevel, number> = {
+  danger: 0,
+  warning: 1,
+  caution: 2,
+  ok: 3,
+};
+
 export default function PatientsScreen() {
   const { data, loading, medsForPatient } = useData();
   const router = useRouter();
@@ -21,21 +28,31 @@ export default function PatientsScreen() {
 
   if (loading) return <Loading />;
 
+  // En acil hasta en üstte: bakıcı ilk bakışta kime gitmesi gerektiğini görür.
+  const rows = data.patients
+    .map((p) => {
+      const meds = medsForPatient(p.id);
+      return {
+        p,
+        meds,
+        level: worstLevelForMeds(meds, data.settings.warnDaysBefore),
+      };
+    })
+    .sort((a, b) => LEVEL_ORDER[a.level] - LEVEL_ORDER[b.level]);
+
   return (
     <View style={styles.container}>
       <ScrollView
         contentContainerStyle={{ padding: spacing.lg, paddingBottom: 100 }}
       >
-        {data.patients.length === 0 ? (
+        {rows.length === 0 ? (
           <EmptyState
-            emoji="👥"
+            icon="people-outline"
             title="Hasta listeniz boş"
             subtitle="Takip etmek istediğiniz kişiyi ekleyin (örn. anneniz, babanız). Ardından ilaçlarını ve raporlarını girin."
           />
         ) : (
-          data.patients.map((p) => {
-            const meds = medsForPatient(p.id);
-            const level = worstLevelForMeds(meds, data.settings.warnDaysBefore);
+          rows.map(({ p, meds, level }) => {
             const age = p.birthYear
               ? new Date().getFullYear() - p.birthYear
               : undefined;

@@ -1,11 +1,7 @@
 import React from 'react';
 import { Tabs } from 'expo-router';
-import { Text } from 'react-native';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { colors, fontSize } from '@/theme';
-
-function TabIcon({ emoji, color }: { emoji: string; color: string }) {
-  return <Text style={{ fontSize: 22, opacity: color === colors.primary ? 1 : 0.5 }}>{emoji}</Text>;
-}
 
 export default function TabsLayout() {
   return (
@@ -25,21 +21,27 @@ export default function TabsLayout() {
         options={{
           title: 'Özet',
           headerTitle: 'İlaç Takip — Özet',
-          tabBarIcon: ({ color }) => <TabIcon emoji="🏠" color={color} />,
+          tabBarIcon: ({ color, focused, size }) => (
+            <Ionicons name={focused ? 'home' : 'home-outline'} size={size ?? 24} color={color} />
+          ),
         }}
       />
       <Tabs.Screen
         name="hastalar"
         options={{
           title: 'Hastalar',
-          tabBarIcon: ({ color }) => <TabIcon emoji="👥" color={color} />,
+          tabBarIcon: ({ color, focused, size }) => (
+            <Ionicons name={focused ? 'people' : 'people-outline'} size={size ?? 24} color={color} />
+          ),
         }}
       />
       <Tabs.Screen
         name="ayarlar"
         options={{
           title: 'Ayarlar',
-          tabBarIcon: ({ color }) => <TabIcon emoji="⚙️" color={color} />,
+          tabBarIcon: ({ color, focused, size }) => (
+            <Ionicons name={focused ? 'settings' : 'settings-outline'} size={size ?? 24} color={color} />
+          ),
         }}
       />
     </Tabs>

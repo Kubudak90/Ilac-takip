@@ -12,7 +12,7 @@ import React, {
 } from 'react';
 import { AppData, Medication, Patient, Settings } from '../types';
 import { emptyData, loadData, saveData } from './storage';
-import { rescheduleAll } from '../utils/notifications';
+import { onAppForeground, rescheduleAll } from '../utils/notifications';
 
 function genId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -40,6 +40,9 @@ interface DataContextValue {
   // Ayarlar
   updateSettings: (patch: Partial<Settings>) => void;
 
+  /** Yedekten geri yükle: tüm veriyi içe aktarılan veriyle değiştirir. */
+  restoreData: (incoming: AppData) => void;
+
   // Barkod defteri
   /** Okutulan GTIN için kayıtlı ilaç adı (varsa). */
   lookupBarcode: (gtin: string) => string | undefined;
@@ -53,13 +56,18 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [data, setData] = useState<AppData>(emptyData);
   const [loading, setLoading] = useState(true);
 
+  // İlk yüklenen veri referansı: kaydetme efekti "veri gerçekten değişti mi?"
+  // kararını bu referansla verir (bkz. aşağıdaki efekt).
+  const loadedRef = useRef<AppData | null>(null);
+
   // İlk yükleme
   useEffect(() => {
     let active = true;
     (async () => {
       const loaded = await loadData();
       if (active) {
-        setData(loaded);
+        loadedRef.current = loaded.data;
+        setData(loaded.data);
         setLoading(false);
       }
     })();
@@ -68,16 +76,44 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  // Her değişiklikte kaydet + bildirimleri yeniden planla (yükleme bitince)
-  const isFirst = useRef(true);
+  // En güncel veriye, render dışı geri çağrılardan (uygulama öne gelince)
+  // erişmek için ref.
+  const dataRef = useRef(data);
+  dataRef.current = data;
+
+  // Veri değişince kaydet + bildirimleri yeniden planla (yükleme bitince).
+  //
+  // KAYIT yalnızca veri GERÇEKTEN değiştiğinde yapılır (referans karşılaştırma):
+  // tüm güncelleyiciler yeni nesne üretir, ilk yüklenen veri ise loadedRef'tedir.
+  // Böylece (a) okuma hatasında bellekteki boş veri depodaki kurtarılabilir
+  // veriyi ezmez, (b) React Strict Mode'da efektin yeniden bağlanması yanlışlıkla
+  // kayıt tetiklemez. Bildirimler her durumda (açılışta da) güncel tarihe göre
+  // kurulur. Yazma/planlama, hızlı düzenlemelerde gereksiz tekrarı önlemek için
+  // kısa süre geciktirilir (debounce).
   useEffect(() => {
     if (loading) return;
-    if (isFirst.current) {
-      isFirst.current = false;
+    const changed = data !== loadedRef.current;
+    if (!changed) {
+      rescheduleAll(data.patients, data.medications, data.settings);
+      return;
     }
-    saveData(data);
-    rescheduleAll(data.patients, data.medications, data.settings);
+    const t = setTimeout(() => {
+      saveData(data);
+      rescheduleAll(data.patients, data.medications, data.settings);
+    }, 400);
+    return () => clearTimeout(t);
   }, [data, loading]);
+
+  // Uygulama öne geldiğinde (ör. ertesi gün) bildirimleri güncel tarihe göre
+  // yeniden kur — böylece "X gün kala" tetikleyicileri kaymaz, geçen güne ait
+  // uyarılar atlanmaz, tükenen ilaçların hatırlatması durur.
+  useEffect(() => {
+    if (loading) return;
+    return onAppForeground(() => {
+      const d = dataRef.current;
+      rescheduleAll(d.patients, d.medications, d.settings);
+    });
+  }, [loading]);
 
   // --- Hasta işlemleri ---
   const addPatient = useCallback((p: Omit<Patient, 'id' | 'createdAt'>) => {
@@ -153,6 +189,16 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     setData((d) => ({ ...d, settings: { ...d.settings, ...patch } }));
   }, []);
 
+  // --- Geri yükleme ---
+  const restoreData = useCallback((incoming: AppData) => {
+    setData(() => ({
+      patients: incoming.patients ?? [],
+      medications: incoming.medications ?? [],
+      settings: { ...emptyData.settings, ...(incoming.settings ?? {}) },
+      barcodeBook: incoming.barcodeBook ?? {},
+    }));
+  }, []);
+
   // --- Barkod defteri ---
   const lookupBarcode = useCallback(
     (gtin: string) => data.barcodeBook[gtin],
@@ -196,6 +242,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       medsForPatient,
       refillMedication,
       updateSettings,
+      restoreData,
       lookupBarcode,
       saveBarcodeName,
     }),
@@ -213,6 +260,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       medsForPatient,
       refillMedication,
       updateSettings,
+      restoreData,
       lookupBarcode,
       saveBarcodeName,
     ],

@@ -48,6 +48,12 @@ export function formatTRFromISO(iso: string): string {
   return formatTR(parseISO(iso));
 }
 
+/** Doz/adet sayısını Türkçe ondalık (virgül) ile gösterir. Ör. 0.5 -> "0,5". */
+export function formatDose(n: number): string {
+  if (!Number.isFinite(n)) return '0';
+  return String(n).replace('.', ',');
+}
+
 /**
  * Kalan günü insan diline çevirir.
  * Örn: -2 -> "2 gün geçti", 0 -> "bugün", 1 -> "yarın", 5 -> "5 gün kaldı"

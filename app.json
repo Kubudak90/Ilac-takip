@@ -15,13 +15,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.ilactakip.app",
-      "infoPlist": {
-        "UIBackgroundModes": [
-          "fetch",
-          "remote-notification"
-        ]
-      }
+      "bundleIdentifier": "com.ilactakip.app"
     },
     "android": {
       "package": "com.ilactakip.app",

@@ -1,9 +1,10 @@
 import React, { useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useData } from '@/store/DataContext';
 import { currentRemainingUnits, stockRunOutDate } from '@/utils/status';
-import { addDays, formatTR, today } from '@/utils/date';
+import { addDays, formatDose, formatTR, today } from '@/utils/date';
 import { colors, fontSize, radius, spacing } from '@/theme';
 import { Button, Card, EmptyState } from '@/components/ui';
 import { NumberField } from '@/components/forms';
@@ -30,7 +31,7 @@ export default function RefillScreen() {
   if (!med) {
     return (
       <View style={styles.center}>
-        <EmptyState emoji="🔍" title="İlaç bulunamadı" />
+        <EmptyState icon="search-outline" title="İlaç bulunamadı" />
       </View>
     );
   }
@@ -48,7 +49,7 @@ export default function RefillScreen() {
 
       <Card>
         <Text style={styles.medName}>{med.name}</Text>
-        <Text style={styles.sub}>Günde {med.dailyDose} adet kullanılıyor</Text>
+        <Text style={styles.sub}>Günde {formatDose(med.dailyDose)} adet kullanılıyor</Text>
         <View style={styles.statRow}>
           <Stat label="Şu an kalan" value={`${remaining} adet`} />
           <Stat
@@ -61,17 +62,24 @@ export default function RefillScreen() {
       <Text style={styles.q}>Kaç adet eklendi? (yeni kutu/reçete)</Text>
       <View style={styles.chips}>
         {QUICK_BOXES.map((n) => (
-          <Text
+          <Pressable
             key={n}
             onPress={() => setAdded((a) => (a || 0) + n)}
             style={styles.chip}
+            hitSlop={6}
+            accessibilityRole="button"
           >
-            +{n}
-          </Text>
+            <Text style={styles.chipText}>+{n}</Text>
+          </Pressable>
         ))}
-        <Text onPress={() => setAdded(0)} style={[styles.chip, styles.chipClear]}>
-          Sıfırla
-        </Text>
+        <Pressable
+          onPress={() => setAdded(0)}
+          style={[styles.chip, styles.chipClear]}
+          hitSlop={6}
+          accessibilityRole="button"
+        >
+          <Text style={[styles.chipText, styles.chipClearText]}>Sıfırla</Text>
+        </Pressable>
       </View>
 
       <NumberField
@@ -84,13 +92,17 @@ export default function RefillScreen() {
 
       <View style={styles.result}>
         <Text style={styles.resultLabel}>Yeni stok: {newTotal} adet</Text>
-        <Text style={styles.resultDate}>
-          📅 Tahmini yeni bitiş: {newRunOut ? formatTR(newRunOut) : '—'}
-        </Text>
+        <View style={styles.resultDateRow}>
+          <Ionicons name="calendar-outline" size={15} color={colors.ok} style={{ marginRight: 4 }} />
+          <Text style={styles.resultDate}>
+            Tahmini yeni bitiş: {newRunOut ? formatTR(newRunOut) : '—'}
+          </Text>
+        </View>
       </View>
 
       <Button
-        title="✓ Yenilemeyi Kaydet"
+        title="Yenilemeyi Kaydet"
+        icon="checkmark"
         onPress={onConfirm}
         disabled={(added || 0) <= 0}
         style={{ marginTop: spacing.lg }}
@@ -126,20 +138,22 @@ const styles = StyleSheet.create({
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.lg },
   chip: {
     backgroundColor: colors.primaryLight,
-    color: colors.primaryDark,
-    fontWeight: '800',
-    fontSize: fontSize.md,
-    paddingVertical: spacing.sm,
+    minHeight: 44,
+    paddingVertical: spacing.md,
     paddingHorizontal: spacing.lg,
     borderRadius: radius.pill,
-    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  chipClear: { backgroundColor: colors.border, color: colors.text },
+  chipText: { color: colors.primaryDark, fontWeight: '800', fontSize: fontSize.md },
+  chipClear: { backgroundColor: colors.border },
+  chipClearText: { color: colors.text },
   result: {
     backgroundColor: colors.okBg,
     borderRadius: radius.md,
     padding: spacing.lg,
   },
   resultLabel: { fontSize: fontSize.lg, fontWeight: '900', color: colors.ok },
-  resultDate: { fontSize: fontSize.md, color: colors.ok, marginTop: 4, fontWeight: '600' },
+  resultDateRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
+  resultDate: { fontSize: fontSize.md, color: colors.ok, fontWeight: '600' },
 });

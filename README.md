@@ -93,6 +93,7 @@ app/                      # Ekranlar (expo-router)
   ilac/duzenle.tsx        # İlaç ekle/düzenle (saatler, son kullanma, canlı önizleme)
   ilac/tara.tsx           # Kamera ile karekod okuma (GS1 DataMatrix)
   ilac/yenile.tsx         # "İlaç yazdırdım" hızlı stok yenileme
+  yedek.tsx               # Yedekle / geri yükle (JSON dışa-içe aktarım)
 src/
   types.ts                # Veri modelleri
   theme.ts                # Renkler, ölçüler
@@ -100,6 +101,40 @@ src/
   utils/                  # Tarih, durum/aciliyet ve bildirim mantığı
   components/             # Ortak UI bileşenleri
 ```
+
+## Bu sürümde iyileştirilenler
+
+- 💾 **Yedekleme / geri yükleme** — tüm veriyi tek metne aktarıp paylaşın
+  (e-posta, notlar, bulut) ve yeni telefonda geri yükleyin. *(Ayarlar → Yedekle)*
+- 🛟 **Veri güvenliği** — depo okunamaz/bozuk olursa veriler artık **silinmez**;
+  bozuk kayıt ayrı bir anahtara yedeklenir ve üzerine yazılmaz. Yüklenen veriler
+  ayrıca temizlenir (geçersiz/negatif değerler düzeltilir).
+- 📤 **İlaç listesini paylaş** — hasta detayında tek dokunuşla doktor/eczane
+  için okunaklı liste oluşturup paylaşın.
+- 📦 **Son kullanma artık panoda** — kutu son kullanma tarihi yaklaşınca (≤60
+  gün) ya da geçince özet ekranında ve bildirimlerde görünür.
+- ½ **Yarım doz** — günde 0,5 adet (yarım tablet) gibi ondalık dozlar girilebilir.
+- 🔔 **Daha akıllı bildirimler** — günlük "ilaç saati" hatırlatmaları saat
+  bazında **birleştirilir** (iOS'un 64 bildirim sınırını aşmamak için), bitişe
+  yaklaşınca **iki kademeli** uyarı (eşik + bitiş günü) verilir, tükenen ilacın
+  hatırlatması durur, uygulama her açıldığında **güncel tarihe göre** yeniden
+  planlanır.
+- 🧭 **Önceliklendirme** — hastalar ve ilaçlar en acilden başlayarak sıralanır.
+- ⏱️ **iOS tarih/saat seçici** — "Bitti" düğmesiyle düzgün kapanır.
+- ♿ **Erişilebilirlik** — daha büyük dokunma alanları, daha okunaklı durum
+  renkleri (açık zeminlerde kontrast düzeltildi).
+
+## Bilinçli kapsam dışı (sonraki sürümler)
+
+Bilerek eklenmeyen, ileride değerlendirilebilecek özellikler:
+
+- **Doz alındı / uyum (adherence) günlüğü** — stok şu an tarih-matematiğiyle
+  tahmin edilir; "aldım/atladım" kaydı uygulamanın modelini büyük ölçüde
+  değiştirir. Stok düzeltmesi "İlaç yazdırdım" ve düzenleme ile yapılır.
+- **Hasta bazlı bildirim susturma / erteleme (snooze)** — şimdilik tek genel
+  açık/kapalı anahtarı var.
+- **Silme geri alma (undo)** — silmeler onay penceresiyle korunur; yedekleme
+  kalıcı kaybı önler.
 
 ## Teknolojiler
 

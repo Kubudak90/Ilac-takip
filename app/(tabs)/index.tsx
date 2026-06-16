@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useData } from '@/store/DataContext';
@@ -26,7 +27,10 @@ export default function DashboardScreen() {
 
   // Sadece dikkat gereken (ok olmayan) öğeler önce; hepsi sıralı zaten
   const attention = items.filter((i) => i.level !== 'ok');
-  const upcoming = items.filter((i) => i.level === 'ok').slice(0, 10);
+  const okItems = items.filter((i) => i.level === 'ok');
+  const UPCOMING_LIMIT = 10;
+  const upcoming = okItems.slice(0, UPCOMING_LIMIT);
+  const hiddenCount = okItems.length - upcoming.length;
 
   if (loading) return <Loading />;
 
@@ -34,7 +38,7 @@ export default function DashboardScreen() {
     return (
       <View style={styles.center}>
         <EmptyState
-          emoji="💊"
+          icon="medkit-outline"
           title="Henüz hasta eklenmedi"
           subtitle="Başlamak için “Hastalar” sekmesinden bir hasta ekleyin ve ilaçlarını girin. Uygulama ilaç ve raporların ne zaman biteceğini sizin için takip etsin."
         />
@@ -56,7 +60,10 @@ export default function DashboardScreen() {
 
       {attention.length > 0 ? (
         <>
-          <Text style={styles.heading}>⚠️ Dikkat gerekenler</Text>
+          <View style={styles.headingRow}>
+            <Ionicons name="alert-circle" size={20} color={colors.warning} />
+            <Text style={styles.heading}>Dikkat gerekenler</Text>
+          </View>
           {attention.map((item) => (
             <UrgencyRow
               key={`${item.medication.id}-${item.kind}`}
@@ -68,7 +75,10 @@ export default function DashboardScreen() {
         </>
       ) : (
         <Card>
-          <Text style={styles.allGood}>✅ Şu an acil bir durum yok.</Text>
+          <View style={styles.headingRow}>
+            <Ionicons name="checkmark-circle" size={20} color={colors.ok} />
+            <Text style={styles.allGood}>Şu an acil bir durum yok.</Text>
+          </View>
           <Text style={styles.allGoodSub}>
             Tüm ilaç ve raporlarda yeterli süre var. Yaklaşanları aşağıda
             görebilirsiniz.
@@ -78,9 +88,10 @@ export default function DashboardScreen() {
 
       {upcoming.length > 0 ? (
         <>
-          <Text style={[styles.heading, { marginTop: spacing.lg }]}>
-            📅 Sıradaki bitişler
-          </Text>
+          <View style={[styles.headingRow, { marginTop: spacing.lg }]}>
+            <Ionicons name="calendar-outline" size={20} color={colors.text} />
+            <Text style={styles.heading}>Sıradaki bitişler</Text>
+          </View>
           {upcoming.map((item) => (
             <UrgencyRow
               key={`${item.medication.id}-${item.kind}`}
@@ -89,12 +100,17 @@ export default function DashboardScreen() {
               onPress={() => router.push(`/hasta/${item.medication.patientId}`)}
             />
           ))}
+          {hiddenCount > 0 ? (
+            <Text style={styles.moreNote}>
+              + {hiddenCount} kayıt daha (hasta detayında görünür)
+            </Text>
+          ) : null}
         </>
       ) : null}
 
       {items.length === 0 ? (
         <EmptyState
-          emoji="📋"
+          icon="list-outline"
           title="İlaç eklenmemiş"
           subtitle="Hastalarınıza ilaç ekleyince bitiş tarihleri burada listelenir."
         />
@@ -133,22 +149,34 @@ function UrgencyRow({
   patientName: string;
   onPress: () => void;
 }) {
+  const kindIcon =
+    item.kind === 'stock'
+      ? 'medkit'
+      : item.kind === 'report'
+        ? 'document-text-outline'
+        : 'cube-outline';
+  const prefix =
+    item.kind === 'stock'
+      ? 'İlaç '
+      : item.kind === 'report'
+        ? 'Rapor '
+        : 'Son kullanma ';
   return (
     <Card onPress={onPress}>
       <View style={styles.rowTop}>
-        <Text style={styles.rowMed} numberOfLines={1}>
-          {item.kind === 'stock' ? '💊 ' : '📄 '}
+        <Ionicons
+          name={kindIcon}
+          size={18}
+          color={colors.text}
+          style={{ marginRight: 6, marginTop: 3 }}
+        />
+        <Text style={styles.rowMed} numberOfLines={2}>
           {item.medication.name}
         </Text>
       </View>
       <Text style={styles.rowPatient}>{patientName}</Text>
       <View style={styles.rowBottom}>
-        <StatusBadge
-          level={item.level}
-          label={
-            (item.kind === 'stock' ? 'İlaç ' : 'Rapor ') + humanDays(item.daysLeft)
-          }
-        />
+        <StatusBadge level={item.level} label={prefix + humanDays(item.daysLeft)} />
         <Text style={styles.rowDate}>{formatTR(item.date)}</Text>
       </View>
     </Card>
@@ -171,11 +199,16 @@ const styles = StyleSheet.create({
     fontSize: fontSize.lg,
     fontWeight: '800',
     color: colors.text,
+  },
+  headingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
     marginBottom: spacing.md,
   },
   allGood: { fontSize: fontSize.lg, fontWeight: '800', color: colors.ok },
   allGoodSub: { fontSize: fontSize.md, color: colors.textMuted, marginTop: spacing.xs },
-  rowTop: { flexDirection: 'row', justifyContent: 'space-between' },
+  rowTop: { flexDirection: 'row', alignItems: 'flex-start' },
   rowMed: { fontSize: fontSize.lg, fontWeight: '800', color: colors.text, flex: 1 },
   rowPatient: { fontSize: fontSize.md, color: colors.textMuted, marginTop: 2, marginBottom: spacing.sm },
   rowBottom: {
@@ -185,4 +218,11 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   rowDate: { fontSize: fontSize.sm, color: colors.textMuted, fontWeight: '600' },
+  moreNote: {
+    fontSize: fontSize.sm,
+    color: colors.textMuted,
+    textAlign: 'center',
+    marginTop: spacing.xs,
+    fontStyle: 'italic',
+  },
 });

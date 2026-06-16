@@ -53,12 +53,43 @@ export function normalizeGtin(code: string): string {
  */
 export function parseGs1(data: string): ParsedBarcode {
   const result: ParsedBarcode = { raw: data };
+  const trimmed = data.trim();
 
-  // Düz EAN-13 / EAN-8: sadece rakam ve karekod yapısı yoksa GTIN kabul et
-  const onlyDigits = data.replace(/\D/g, '');
-  if (data === onlyDigits && (data.length === 13 || data.length === 12 || data.length === 8)) {
-    result.gtin = normalizeGtin(data);
+  // Düz barkod (EAN-8/12/13/14, GTIN-14): tamamen rakamsa GTIN kabul et
+  const onlyDigits = trimmed.replace(/\D/g, '');
+  if (
+    trimmed === onlyDigits &&
+    (trimmed.length === 14 ||
+      trimmed.length === 13 ||
+      trimmed.length === 12 ||
+      trimmed.length === 8)
+  ) {
+    result.gtin = normalizeGtin(trimmed);
     return result;
+  }
+
+  // İnsan-okunur parantezli biçim: (01)08699...(17)260131(10)LOT(21)SERI
+  // Bazı tarayıcılar AI'ları parantez içinde verir.
+  if (trimmed.includes('(')) {
+    const re = /\((\d{2,4})\)([^(]*)/g;
+    let m: RegExpExecArray | null;
+    let found = false;
+    while ((m = re.exec(trimmed)) !== null) {
+      found = true;
+      const ai = m[1];
+      const val = m[2];
+      if (ai === '01') {
+        result.gtin = normalizeGtin(val.replace(/\D/g, '').slice(0, 14));
+      } else if (ai === '17') {
+        result.expiry = parseExpiry(val.replace(/\D/g, '').slice(0, 6));
+      } else if (ai === '10') {
+        result.lot = val.trim();
+      } else if (ai === '21') {
+        result.serial = val.trim();
+      }
+      // diğer AI'lar (üretim tarihi vb.) yok sayılır
+    }
+    if (found) return result;
   }
 
   // Baştaki FNC1 işaretlerini temizle

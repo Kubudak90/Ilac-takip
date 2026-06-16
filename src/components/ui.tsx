@@ -10,6 +10,7 @@ import {
   View,
   ViewStyle,
 } from 'react-native';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import {
   colors,
   fontSize,
@@ -49,12 +50,14 @@ export function Button({
   variant = 'primary',
   disabled,
   style,
+  icon,
 }: {
   title: string;
   onPress: () => void;
   variant?: 'primary' | 'secondary' | 'danger';
   disabled?: boolean;
   style?: ViewStyle;
+  icon?: React.ComponentProps<typeof Ionicons>['name'];
 }) {
   const bg =
     variant === 'primary'
@@ -77,6 +80,9 @@ export function Button({
         style,
       ]}
     >
+      {icon ? (
+        <Ionicons name={icon} size={20} color={fg} style={{ marginRight: 8 }} />
+      ) : null}
       <Text style={[styles.buttonText, { color: fg }]}>{title}</Text>
     </Pressable>
   );
@@ -103,13 +109,16 @@ export function Pill({
   text,
   color = colors.textMuted,
   bg = colors.bg,
+  icon,
 }: {
   text: string;
   color?: string;
   bg?: string;
+  icon?: React.ComponentProps<typeof Ionicons>['name'];
 }) {
   return (
     <View style={[styles.pill, { backgroundColor: bg }]}>
+      {icon ? <Ionicons name={icon} size={13} color={color} style={{ marginRight: 4 }} /> : null}
       <Text style={[styles.pillText, { color }]}>{text}</Text>
     </View>
   );
@@ -133,17 +142,17 @@ export function Section({
 }
 
 export function EmptyState({
-  emoji,
+  icon,
   title,
   subtitle,
 }: {
-  emoji: string;
+  icon: React.ComponentProps<typeof Ionicons>['name'];
   title: string;
   subtitle?: string;
 }) {
   return (
     <View style={styles.empty}>
-      <Text style={styles.emptyEmoji}>{emoji}</Text>
+      <Ionicons name={icon} size={56} color={colors.textLight} style={styles.emptyEmoji} />
       <Text style={styles.emptyTitle}>{title}</Text>
       {subtitle ? <Text style={styles.emptySub}>{subtitle}</Text> : null}
     </View>
@@ -175,6 +184,7 @@ const styles = StyleSheet.create({
   button: {
     minHeight: 54,
     borderRadius: radius.md,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: spacing.lg,
@@ -194,6 +204,8 @@ const styles = StyleSheet.create({
   dot: { width: 10, height: 10, borderRadius: 5 },
   badgeText: { fontSize: fontSize.sm, fontWeight: '700' },
   pill: {
+    flexDirection: 'row',
+    alignItems: 'center',
     alignSelf: 'flex-start',
     paddingVertical: 4,
     paddingHorizontal: 10,

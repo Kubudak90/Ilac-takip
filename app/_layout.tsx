@@ -45,6 +45,10 @@ export default function RootLayout() {
             name="ilac/tara"
             options={{ title: 'Karekod Tara', presentation: 'modal' }}
           />
+          <Stack.Screen
+            name="yedek"
+            options={{ title: 'Yedekle / Geri Yükle', presentation: 'modal' }}
+          />
         </Stack>
       </DataProvider>
     </SafeAreaProvider>

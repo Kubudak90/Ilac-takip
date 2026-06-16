@@ -14,11 +14,11 @@ export const colors = {
   textMuted: '#64748B',
   textLight: '#94A3B8',
 
-  // Durum renkleri (aciliyet)
+  // Durum renkleri (aciliyet) — açık zeminlerde okunaklı kontrast için koyu tonlar
   danger: '#DC2626', // bitti / 0-3 gün
-  warning: '#EA580C', // yakında / warnDays içinde
-  caution: '#CA8A04', // 2 kat warnDays içinde
-  ok: '#16A34A', // bol zaman var
+  warning: '#C2410C', // yakında / warnDays içinde
+  caution: '#92400E', // 2 kat warnDays içinde (pale sarı üzerinde okunaklı)
+  ok: '#15803D', // bol zaman var
 
   dangerBg: '#FEE2E2',
   warningBg: '#FFEDD5',

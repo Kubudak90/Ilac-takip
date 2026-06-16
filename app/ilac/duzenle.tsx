@@ -9,18 +9,20 @@ import {
   View,
 } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useData } from '@/store/DataContext';
 import { Medication } from '@/types';
 import { colors, fontSize, radius, spacing } from '@/theme';
 import { Button } from '@/components/ui';
 import {
   DateField,
+  DecimalField,
   NumberField,
   SwitchField,
   TextField,
   TimeListField,
 } from '@/components/forms';
-import { addDays, formatTR, parseISO, startOfDay, toISODate, today } from '@/utils/date';
+import { addDays, formatDose, formatTR, parseISO, startOfDay, toISODate, today } from '@/utils/date';
 
 export default function EditMedicationScreen() {
   const params = useLocalSearchParams<{
@@ -62,12 +64,20 @@ export default function EditMedicationScreen() {
   const [barcode] = useState<string | undefined>(existing?.barcode ?? params.barcode);
   const [notes, setNotes] = useState(existing?.notes ?? '');
 
-  // Canlı önizleme: girilen stok bugünden itibaren ne zaman biter?
+  // Canlı önizleme: kaydedilecek değere göre ilaç ne zaman biter?
+  // Stok değişmediyse referans tarih (stockUpdatedAt) korunur; aksi halde
+  // bugüne çekilir — kaydetme mantığıyla birebir aynı, böylece önizleme ile
+  // kart aynı tarihi gösterir.
   const previewRunOut = useMemo(() => {
     if (!dailyDose || dailyDose <= 0 || stockUnits === undefined) return null;
     const days = Math.floor((stockUnits ?? 0) / dailyDose);
-    return addDays(today(), days);
-  }, [dailyDose, stockUnits]);
+    const stockChanged = !existing || existing.stockUnits !== (stockUnits ?? 0);
+    const base =
+      stockChanged || !existing
+        ? today()
+        : startOfDay(parseISO(existing.stockUpdatedAt));
+    return addDays(base, days);
+  }, [dailyDose, stockUnits, existing]);
 
   function onSave() {
     const trimmed = name.trim();
@@ -76,7 +86,7 @@ export default function EditMedicationScreen() {
       return;
     }
     if (!dailyDose || dailyDose <= 0) {
-      Alert.alert('Eksik bilgi', 'Günde kaç adet kullanıldığını girin (en az 1).');
+      Alert.alert('Eksik bilgi', 'Günde kaç adet kullanıldığını girin (yarım için 0,5).');
       return;
     }
 
@@ -132,7 +142,8 @@ export default function EditMedicationScreen() {
       <ScrollView contentContainerStyle={{ padding: spacing.lg, paddingBottom: spacing.xxl }}>
         {!isEdit ? (
           <Button
-            title="📷 Karekod Tara"
+            title="Karekod Tara"
+            icon="qr-code-outline"
             variant="secondary"
             onPress={() => router.push(`/ilac/tara?patientId=${patientId}`)}
             style={{ marginBottom: spacing.lg }}
@@ -141,7 +152,8 @@ export default function EditMedicationScreen() {
 
         {barcode ? (
           <View style={styles.barcodeNote}>
-            <Text style={styles.barcodeText}>📦 Barkod: {barcode}</Text>
+            <Ionicons name="cube-outline" size={15} color={colors.textMuted} style={{ marginRight: 6 }} />
+            <Text style={styles.barcodeText}>Barkod: {barcode}</Text>
           </View>
         ) : null}
 
@@ -152,11 +164,11 @@ export default function EditMedicationScreen() {
           placeholder="örn. Coraspin 100 mg"
         />
 
-        <NumberField
+        <DecimalField
           label="Günde kaç adet? *"
           value={dailyDose}
           onChangeNumber={setDailyDose}
-          placeholder="örn. 1"
+          placeholder="örn. 1 (yarım için 0,5)"
           suffix="adet/gün"
         />
 
@@ -170,12 +182,15 @@ export default function EditMedicationScreen() {
 
         {/* Canlı önizleme */}
         <View style={styles.preview}>
-          <Text style={styles.previewLabel}>📅 Tahmini bitiş</Text>
+          <View style={styles.previewLabelRow}>
+            <Ionicons name="calendar-outline" size={14} color={colors.primaryDark} style={{ marginRight: 4 }} />
+            <Text style={styles.previewLabel}>Tahmini bitiş</Text>
+          </View>
           <Text style={styles.previewValue}>
             {previewRunOut ? formatTR(previewRunOut) : 'Hesaplanamadı'}
           </Text>
           <Text style={styles.previewHint}>
-            Elde kalan {stockUnits ?? 0} adet, günde {dailyDose || 0} adetle bu tarihte biter.
+            Elde kalan {stockUnits ?? 0} adet, günde {formatDose(dailyDose || 0)} adetle bu tarihte biter.
           </Text>
         </View>
 
@@ -242,6 +257,7 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     marginBottom: spacing.lg,
   },
+  previewLabelRow: { flexDirection: 'row', alignItems: 'center' },
   previewLabel: { fontSize: fontSize.sm, fontWeight: '700', color: colors.primaryDark },
   previewValue: {
     fontSize: fontSize.xl,
@@ -252,6 +268,8 @@ const styles = StyleSheet.create({
   previewHint: { fontSize: fontSize.sm, color: colors.primaryDark, opacity: 0.8 },
   divider: { height: 1, backgroundColor: colors.border, marginBottom: spacing.lg },
   barcodeNote: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: colors.bg,
     borderRadius: radius.sm,
     padding: spacing.md,

@@ -4,6 +4,10 @@ import { Medication } from '../types';
 import { StatusLevel } from '../theme';
 import { addDays, daysBetween, parseISO, startOfDay, today } from './date';
 
+// Çok büyük stok girilirse (ör. yanlışlıkla 99999) tarih hesabının "Invalid
+// Date" ya da saçma yıllar üretmesini engellemek için üst sınır (~10 yıl).
+const MAX_DAYS_OF_SUPPLY = 3650;
+
 /**
  * Stok bitiş tarihini hesaplar.
  * kalan gün = floor(stockUnits / dailyDose), referans = stockUpdatedAt.
@@ -11,9 +15,16 @@ import { addDays, daysBetween, parseISO, startOfDay, today } from './date';
  */
 export function stockRunOutDate(med: Medication): Date | null {
   if (!med.dailyDose || med.dailyDose <= 0) return null;
-  const daysOfSupply = Math.floor(med.stockUnits / med.dailyDose);
+  const raw = Math.floor(med.stockUnits / med.dailyDose);
+  const daysOfSupply = Math.min(Math.max(0, raw), MAX_DAYS_OF_SUPPLY);
   const base = startOfDay(parseISO(med.stockUpdatedAt));
   return addDays(base, daysOfSupply);
+}
+
+/** Bugünden kutu son kullanma tarihine kalan gün. Yoksa null. */
+export function daysUntilExpiry(med: Medication): number | null {
+  if (!med.expiryDate) return null;
+  return daysBetween(today(), parseISO(med.expiryDate));
 }
 
 /** Bugünden stok bitişine kalan gün (negatif = bitti). */
@@ -56,21 +67,18 @@ export function levelForDays(days: number | null, warnDays: number): StatusLevel
 
 export interface UrgencyItem {
   medication: Medication;
-  /** 'stock' = ilaç bitiyor, 'report' = rapor bitiyor */
-  kind: 'stock' | 'report';
+  /** 'stock' = ilaç bitiyor, 'report' = rapor bitiyor, 'expiry' = kutu son kullanma */
+  kind: 'stock' | 'report' | 'expiry';
   date: Date;
   daysLeft: number;
   level: StatusLevel;
 }
 
-/**
- * Bir ilacın en acil durumunu döndürür (stok mu rapor mu daha yakın).
- * Hiç hesaplanamıyorsa null.
- */
-export function mostUrgentForMedication(
+/** Bir ilacın tüm aciliyet satırları: stok, rapor ve (varsa) kutu son kullanma. */
+export function itemsForMedication(
   med: Medication,
   warnDays: number,
-): UrgencyItem | null {
+): UrgencyItem[] {
   const items: UrgencyItem[] = [];
 
   const stockOut = stockRunOutDate(med);
@@ -96,14 +104,42 @@ export function mostUrgentForMedication(
     });
   }
 
+  // Son kullanma sadece YAKIN olduğunda (≤60 gün) ya da geçtiğinde aciliyet
+  // listesine girer; uzaktaki tarih kartta zaten görünür, panoyu doldurmaz.
+  const expiryDays = daysUntilExpiry(med);
+  if (med.expiryDate && expiryDays !== null && expiryDays <= 60) {
+    // Son kullanma: geçmişse acil, 30 güne kadar uyarı, aksi halde takip.
+    const level: StatusLevel =
+      expiryDays < 0 ? 'danger' : expiryDays <= 30 ? 'warning' : 'caution';
+    items.push({
+      medication: med,
+      kind: 'expiry',
+      date: parseISO(med.expiryDate),
+      daysLeft: expiryDays,
+      level,
+    });
+  }
+
+  return items;
+}
+
+/**
+ * Bir ilacın en acil durumunu döndürür (stok/rapor/son kullanma).
+ * Hiç hesaplanamıyorsa null.
+ */
+export function mostUrgentForMedication(
+  med: Medication,
+  warnDays: number,
+): UrgencyItem | null {
+  const items = itemsForMedication(med, warnDays);
   if (items.length === 0) return null;
   items.sort((a, b) => a.daysLeft - b.daysLeft);
   return items[0];
 }
 
 /**
- * Tüm ilaçlar için aciliyet listesi (stok + rapor ayrı satırlar),
- * en yakın bitişe göre sıralı.
+ * Tüm ilaçlar için aciliyet listesi (stok + rapor + son kullanma ayrı
+ * satırlar), en yakın bitişe göre sıralı.
  */
 export function buildUrgencyList(
   meds: Medication[],
@@ -111,27 +147,7 @@ export function buildUrgencyList(
 ): UrgencyItem[] {
   const items: UrgencyItem[] = [];
   for (const med of meds) {
-    const stockOut = stockRunOutDate(med);
-    const stockDays = daysUntilStockOut(med);
-    if (stockOut && stockDays !== null) {
-      items.push({
-        medication: med,
-        kind: 'stock',
-        date: stockOut,
-        daysLeft: stockDays,
-        level: levelForDays(stockDays, warnDays),
-      });
-    }
-    const reportDays = daysUntilReportEnd(med);
-    if (med.hasReport && med.reportEndDate && reportDays !== null) {
-      items.push({
-        medication: med,
-        kind: 'report',
-        date: parseISO(med.reportEndDate),
-        daysLeft: reportDays,
-        level: levelForDays(reportDays, warnDays),
-      });
-    }
+    items.push(...itemsForMedication(med, warnDays));
   }
   items.sort((a, b) => a.daysLeft - b.daysLeft);
   return items;

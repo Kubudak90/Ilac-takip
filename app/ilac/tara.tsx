@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Alert, StyleSheet, Text, View } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useData } from '@/store/DataContext';
 import { parseGs1 } from '@/utils/barcode';
@@ -48,7 +49,7 @@ export default function ScanScreen() {
     return (
       <View style={styles.center}>
         <Stack.Screen options={{ title: 'Karekod Tara' }} />
-        <Text style={styles.emoji}>📷</Text>
+        <Ionicons name="camera-outline" size={56} color={colors.primary} style={styles.emoji} />
         <Text style={styles.title}>Kamera izni gerekli</Text>
         <Text style={styles.info}>
           İlaç kutusundaki karekodu okuyabilmek için kamera iznine ihtiyacımız
@@ -75,6 +76,19 @@ export default function ScanScreen() {
           barcodeTypes: ['datamatrix', 'ean13', 'ean8', 'qr', 'code128', 'code39'],
         }}
         onBarcodeScanned={scanned ? undefined : ({ data }) => onScan(data)}
+        onMountError={() => {
+          Alert.alert(
+            'Kamera açılamadı',
+            'Kameraya erişilemedi. İlacı elle ekleyebilirsiniz.',
+            [
+              {
+                text: 'Elle Ekle',
+                onPress: () => router.replace(`/ilac/duzenle?patientId=${patientId}`),
+              },
+              { text: 'Vazgeç', style: 'cancel', onPress: () => router.back() },
+            ],
+          );
+        }}
       />
       <View style={styles.overlay} pointerEvents="box-none">
         <View style={styles.topBar}>
