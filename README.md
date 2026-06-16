@@ -19,9 +19,23 @@ hastayı yönetebilir.
   yeşil (sorun yok).
 - 🏠 **Özet ekranı** — tüm hastalardaki yaklaşan bitişleri en acilden başlayarak
   tek listede gösterir.
+- ⏰ **İlaç saati hatırlatması** — her ilaca günlük alım saatleri ekleyin
+  (örn. 08:00 ve 20:00), telefon o saatte “ilaç vakti” bildirimi göndersin.
+- ✓ **“İlaç yazdırdım” hızlı yenileme** — yeni kutu/reçete alınca tek dokunuşla
+  stok ekleyin; bitiş tarihi otomatik güncellensin.
+- 📷 **Karekod ile ekleme** — ilaç kutusundaki karekodu (GS1 DataMatrix)
+  kameradan okutun: **barkod ve son kullanma tarihi otomatik** dolar. İlaç adını
+  bir kez yazınca uygulama o barkodu öğrenir; aynı kutu tekrar okutulduğunda ad
+  kendiliğinden gelir. Elle ekleme her zaman açık.
 - 🔔 **Bildirimler** — bitişe ayarladığınız gün kala (örn. 7 gün) hatırlatma.
 - 📵 **Tamamen çevrimdışı** — veriler yalnızca telefonda saklanır (AsyncStorage),
   sunucuya gitmez, üyelik gerektirmez.
+
+> ℹ️ **e-Reçete hakkında:** Bir e-reçete kodundan ilaçların otomatik çekilmesi
+> mümkün değildir; reçete içeriği SGK/MEDULA ve e-Nabız sistemlerinde tutulur ve
+> bunlara erişim yalnızca yetkili sağlık kuruluşlarına/eczanelere açıktır (halka
+> açık API yoktur). Bu yüzden kutu karekodu okuyup barkod + son kullanma tarihini
+> alıyor, ilaç adını “öğrenen barkod defteri” ile yönetiyoruz.
 
 ## Nasıl çalıştırılır?
 
@@ -76,7 +90,9 @@ app/                      # Ekranlar (expo-router)
   (tabs)/                 # Alt sekmeler: Özet, Hastalar, Ayarlar
   hasta/[id].tsx          # Hasta detayı + ilaç listesi
   hasta/duzenle.tsx       # Hasta ekle/düzenle
-  ilac/duzenle.tsx        # İlaç ekle/düzenle (canlı bitiş önizlemesi)
+  ilac/duzenle.tsx        # İlaç ekle/düzenle (saatler, son kullanma, canlı önizleme)
+  ilac/tara.tsx           # Kamera ile karekod okuma (GS1 DataMatrix)
+  ilac/yenile.tsx         # "İlaç yazdırdım" hızlı stok yenileme
 src/
   types.ts                # Veri modelleri
   theme.ts                # Renkler, ölçüler
@@ -88,7 +104,7 @@ src/
 ## Teknolojiler
 
 Expo (React Native) · TypeScript · expo-router · expo-notifications ·
-AsyncStorage · @react-native-community/datetimepicker
+expo-camera (karekod) · AsyncStorage · @react-native-community/datetimepicker
 
 ---
 

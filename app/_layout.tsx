@@ -37,6 +37,14 @@ export default function RootLayout() {
             name="ilac/duzenle"
             options={{ title: 'İlaç', presentation: 'modal' }}
           />
+          <Stack.Screen
+            name="ilac/yenile"
+            options={{ title: 'İlaç Yazdırdım', presentation: 'modal' }}
+          />
+          <Stack.Screen
+            name="ilac/tara"
+            options={{ title: 'Karekod Tara', presentation: 'modal' }}
+          />
         </Stack>
       </DataProvider>
     </SafeAreaProvider>

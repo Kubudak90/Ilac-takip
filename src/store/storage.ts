@@ -9,6 +9,7 @@ export const emptyData: AppData = {
   patients: [],
   medications: [],
   settings: DEFAULT_SETTINGS,
+  barcodeBook: {},
 };
 
 export async function loadData(): Promise<AppData> {
@@ -20,6 +21,7 @@ export async function loadData(): Promise<AppData> {
       patients: parsed.patients ?? [],
       medications: parsed.medications ?? [],
       settings: { ...DEFAULT_SETTINGS, ...(parsed.settings ?? {}) },
+      barcodeBook: parsed.barcodeBook ?? {},
     };
   } catch (e) {
     console.warn('Veri okunamadı, boş başlanıyor:', e);

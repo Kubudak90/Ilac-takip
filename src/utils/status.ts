@@ -23,6 +23,16 @@ export function daysUntilStockOut(med: Medication): number | null {
   return daysBetween(today(), d);
 }
 
+/**
+ * Bugün itibarıyla elde kalan tahmini adet.
+ * = stockUnits - dailyDose * (stokGirildiğindenBeriGeçenGün), en az 0.
+ */
+export function currentRemainingUnits(med: Medication): number {
+  const elapsed = daysBetween(parseISO(med.stockUpdatedAt), today());
+  const used = Math.max(0, elapsed) * med.dailyDose;
+  return Math.max(0, med.stockUnits - used);
+}
+
 /** Bugünden rapor bitişine kalan gün. Rapor yoksa null. */
 export function daysUntilReportEnd(med: Medication): number | null {
   if (!med.hasReport || !med.reportEndDate) return null;

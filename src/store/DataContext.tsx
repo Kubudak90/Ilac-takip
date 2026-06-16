@@ -39,6 +39,12 @@ interface DataContextValue {
 
   // Ayarlar
   updateSettings: (patch: Partial<Settings>) => void;
+
+  // Barkod defteri
+  /** Okutulan GTIN için kayıtlı ilaç adı (varsa). */
+  lookupBarcode: (gtin: string) => string | undefined;
+  /** Bir GTIN -> ilaç adı eşleşmesini kaydeder (uygulama öğrenir). */
+  saveBarcodeName: (gtin: string, name: string) => void;
 }
 
 const DataContext = createContext<DataContextValue | undefined>(undefined);
@@ -147,6 +153,19 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     setData((d) => ({ ...d, settings: { ...d.settings, ...patch } }));
   }, []);
 
+  // --- Barkod defteri ---
+  const lookupBarcode = useCallback(
+    (gtin: string) => data.barcodeBook[gtin],
+    [data.barcodeBook],
+  );
+  const saveBarcodeName = useCallback((gtin: string, name: string) => {
+    if (!gtin || !name.trim()) return;
+    setData((d) => ({
+      ...d,
+      barcodeBook: { ...d.barcodeBook, [gtin]: name.trim() },
+    }));
+  }, []);
+
   // --- Seçiciler (selectors) ---
   const getPatient = useCallback(
     (id: string) => data.patients.find((p) => p.id === id),
@@ -177,6 +196,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       medsForPatient,
       refillMedication,
       updateSettings,
+      lookupBarcode,
+      saveBarcodeName,
     }),
     [
       data,
@@ -192,6 +213,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       medsForPatient,
       refillMedication,
       updateSettings,
+      lookupBarcode,
+      saveBarcodeName,
     ],
   );
 

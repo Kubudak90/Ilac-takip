@@ -118,6 +118,62 @@ export function DateField({
   );
 }
 
+/** "HH:MM" biçiminde saat listesi düzenleyici (ilaç saatleri). */
+export function TimeListField({
+  label,
+  times,
+  onChange,
+}: {
+  label: string;
+  times: string[];
+  onChange: (t: string[]) => void;
+}) {
+  const [show, setShow] = useState(false);
+
+  function addTime(d: Date) {
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mm = String(d.getMinutes()).padStart(2, '0');
+    const t = `${hh}:${mm}`;
+    if (times.includes(t)) return;
+    onChange([...times, t].sort());
+  }
+
+  return (
+    <View style={styles.field}>
+      <Label>{label}</Label>
+      <View style={styles.timeRow}>
+        {times.map((t) => (
+          <Pressable
+            key={t}
+            onPress={() => onChange(times.filter((x) => x !== t))}
+            style={styles.timeChip}
+          >
+            <Text style={styles.timeChipText}>{t}  ✕</Text>
+          </Pressable>
+        ))}
+        <Pressable onPress={() => setShow(true)} style={styles.timeAdd}>
+          <Text style={styles.timeAddText}>+ saat</Text>
+        </Pressable>
+      </View>
+      {times.length === 0 ? (
+        <Text style={styles.timeHint}>Saat eklemezseniz günlük hatırlatma kurulmaz.</Text>
+      ) : null}
+      {show && (
+        <DateTimePicker
+          value={new Date()}
+          mode="time"
+          is24Hour
+          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+          onChange={(event, selected) => {
+            if (Platform.OS !== 'ios') setShow(false);
+            if (event.type === 'set' && selected) addTime(selected);
+          }}
+        />
+      )}
+    </View>
+  );
+}
+
 export function SwitchField({
   label,
   value,
@@ -167,4 +223,22 @@ const styles = StyleSheet.create({
   dateText: { fontSize: fontSize.lg, color: colors.text },
   switchRow: { flexDirection: 'row', alignItems: 'center' },
   switchDesc: { fontSize: fontSize.sm, color: colors.textMuted },
+  timeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, alignItems: 'center' },
+  timeChip: {
+    backgroundColor: colors.primaryLight,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.pill,
+  },
+  timeChipText: { color: colors.primaryDark, fontWeight: '700', fontSize: fontSize.md },
+  timeAdd: {
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    borderStyle: 'dashed',
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.pill,
+  },
+  timeAddText: { color: colors.primary, fontWeight: '700', fontSize: fontSize.md },
+  timeHint: { fontSize: fontSize.sm, color: colors.textMuted, marginTop: spacing.sm },
 });

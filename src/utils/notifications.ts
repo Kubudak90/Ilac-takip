@@ -66,6 +66,33 @@ export async function rescheduleAll(
   if (!settings.notificationsEnabled) return;
 
   const patientName = new Map(patients.map((p) => [p.id, p.fullName]));
+
+  // 1) Günlük ilaç saati hatırlatmaları (her gün tekrarlanır)
+  for (const med of medications) {
+    for (const time of med.doseTimes ?? []) {
+      const [hh, mm] = time.split(':').map((x) => parseInt(x, 10));
+      if (Number.isNaN(hh) || Number.isNaN(mm)) continue;
+      const who = patientName.get(med.patientId) ?? 'Hasta';
+      try {
+        await Notifications.scheduleNotificationAsync({
+          content: {
+            title: '⏰ İlaç saati',
+            body: `${who} — ${med.name} alma vakti (${time}).`,
+            data: { medicationId: med.id, kind: 'dose' },
+          },
+          trigger: {
+            type: Notifications.SchedulableTriggerInputTypes.DAILY,
+            hour: hh,
+            minute: mm,
+          },
+        });
+      } catch (e) {
+        console.warn('İlaç saati bildirimi planlanamadı:', e);
+      }
+    }
+  }
+
+  // 2) İlaç/rapor bitiş uyarıları
   const items = buildUrgencyList(medications, settings.warnDaysBefore);
   const now = new Date();
 

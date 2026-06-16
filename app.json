@@ -48,7 +48,13 @@
         }
       ],
       "expo-asset",
-      "expo-font"
+      "expo-font",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "İlaç kutusundaki karekodu okuyabilmek için kamera erişimi gerekir."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

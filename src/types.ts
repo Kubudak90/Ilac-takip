@@ -36,6 +36,12 @@ export interface Medication {
   hasReport: boolean;
   /** Rapor bitiş tarihi (ISO, sadece hasReport=true ise anlamlı) */
   reportEndDate?: string;
+  /** Günlük alım saatleri, "HH:MM" biçiminde (ör. ["08:00","20:00"]) */
+  doseTimes?: string[];
+  /** İlaç kutusundaki karekoddan okunan barkod (GTIN, 14 hane) */
+  barcode?: string;
+  /** Kutu son kullanma tarihi (ISO, karekoddan okunur) */
+  expiryDate?: string;
   /** Serbest not (ör. "aç karnına", "sabah") */
   notes?: string;
   createdAt: string;
@@ -55,6 +61,11 @@ export interface AppData {
   patients: Patient[];
   medications: Medication[];
   settings: Settings;
+  /**
+   * Barkod defteri: okutulan bir GTIN için en son kullanılan ilaç adı.
+   * Aynı kutu tekrar okutulduğunda ad otomatik dolar (uygulama öğrenir).
+   */
+  barcodeBook: Record<string, string>;
 }
 
 export const DEFAULT_SETTINGS: Settings = {

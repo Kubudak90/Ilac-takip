@@ -92,12 +92,19 @@ export default function PatientDetailScreen() {
               med={med}
               warnDays={warnDays}
               onPress={() => router.push(`/ilac/duzenle?id=${med.id}&patientId=${id}`)}
+              onRefill={() => router.push(`/ilac/yenile?id=${med.id}`)}
             />
           ))
         )}
 
         <Button
-          title="+ İlaç Ekle"
+          title="📷 Karekod ile İlaç Ekle"
+          onPress={() => router.push(`/ilac/tara?patientId=${id}`)}
+          style={{ marginTop: spacing.md }}
+        />
+        <Button
+          title="+ Elle İlaç Ekle"
+          variant="secondary"
           onPress={() => router.push(`/ilac/duzenle?patientId=${id}`)}
           style={{ marginTop: spacing.md }}
         />

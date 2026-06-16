@@ -13,24 +13,53 @@ import { useData } from '@/store/DataContext';
 import { Medication } from '@/types';
 import { colors, fontSize, radius, spacing } from '@/theme';
 import { Button } from '@/components/ui';
-import { DateField, NumberField, SwitchField, TextField } from '@/components/forms';
+import {
+  DateField,
+  NumberField,
+  SwitchField,
+  TextField,
+  TimeListField,
+} from '@/components/forms';
 import { addDays, formatTR, parseISO, startOfDay, toISODate, today } from '@/utils/date';
 
 export default function EditMedicationScreen() {
-  const { id, patientId } = useLocalSearchParams<{ id?: string; patientId: string }>();
-  const { getMedication, addMedication, updateMedication, deleteMedication } = useData();
+  const params = useLocalSearchParams<{
+    id?: string;
+    patientId: string;
+    barcode?: string;
+    scannedName?: string;
+    expiry?: string; // ISO
+  }>();
+  const { id, patientId } = params;
+  const {
+    getMedication,
+    addMedication,
+    updateMedication,
+    deleteMedication,
+    saveBarcodeName,
+  } = useData();
   const router = useRouter();
 
   const existing = id ? getMedication(id) : undefined;
   const isEdit = !!existing;
 
-  const [name, setName] = useState(existing?.name ?? '');
+  const [name, setName] = useState(existing?.name ?? params.scannedName ?? '');
   const [dailyDose, setDailyDose] = useState<number | undefined>(existing?.dailyDose ?? 1);
   const [stockUnits, setStockUnits] = useState<number | undefined>(existing?.stockUnits ?? 0);
+  const [doseTimes, setDoseTimes] = useState<string[]>(existing?.doseTimes ?? []);
+
   const [hasReport, setHasReport] = useState(existing?.hasReport ?? false);
   const [reportEndDate, setReportEndDate] = useState<Date>(
     existing?.reportEndDate ? parseISO(existing.reportEndDate) : addDays(today(), 180),
   );
+
+  const initialExpiry = existing?.expiryDate ?? params.expiry;
+  const [hasExpiry, setHasExpiry] = useState(!!initialExpiry);
+  const [expiryDate, setExpiryDate] = useState<Date>(
+    initialExpiry ? parseISO(initialExpiry) : addDays(today(), 365),
+  );
+
+  const [barcode] = useState<string | undefined>(existing?.barcode ?? params.barcode);
   const [notes, setNotes] = useState(existing?.notes ?? '');
 
   // Canlı önizleme: girilen stok bugünden itibaren ne zaman biter?
@@ -54,17 +83,22 @@ export default function EditMedicationScreen() {
     const stockChanged = !existing || existing.stockUnits !== (stockUnits ?? 0);
 
     const base: Omit<Medication, 'id' | 'createdAt'> = {
-      patientId: patientId,
+      patientId,
       name: trimmed,
-      dailyDose: dailyDose,
+      dailyDose,
       stockUnits: stockUnits ?? 0,
-      // Stok değiştiyse referans tarihi bugüne çek
       stockUpdatedAt:
         stockChanged || !existing ? toISODate(today()) : existing.stockUpdatedAt,
+      doseTimes: doseTimes.length ? doseTimes : undefined,
       hasReport,
       reportEndDate: hasReport ? toISODate(startOfDay(reportEndDate)) : undefined,
+      barcode,
+      expiryDate: hasExpiry ? toISODate(startOfDay(expiryDate)) : undefined,
       notes: notes.trim() || undefined,
     };
+
+    // Barkod defterini öğret: bu GTIN için adı hatırla
+    if (barcode) saveBarcodeName(barcode, trimmed);
 
     if (isEdit && existing) {
       updateMedication(existing.id, base);
@@ -96,6 +130,21 @@ export default function EditMedicationScreen() {
     >
       <Stack.Screen options={{ title: isEdit ? 'İlacı Düzenle' : 'Yeni İlaç' }} />
       <ScrollView contentContainerStyle={{ padding: spacing.lg, paddingBottom: spacing.xxl }}>
+        {!isEdit ? (
+          <Button
+            title="📷 Karekod Tara"
+            variant="secondary"
+            onPress={() => router.push(`/ilac/tara?patientId=${patientId}`)}
+            style={{ marginBottom: spacing.lg }}
+          />
+        ) : null}
+
+        {barcode ? (
+          <View style={styles.barcodeNote}>
+            <Text style={styles.barcodeText}>📦 Barkod: {barcode}</Text>
+          </View>
+        ) : null}
+
         <TextField
           label="İlaç Adı *"
           value={name}
@@ -126,10 +175,15 @@ export default function EditMedicationScreen() {
             {previewRunOut ? formatTR(previewRunOut) : 'Hesaplanamadı'}
           </Text>
           <Text style={styles.previewHint}>
-            Bugünden itibaren elde kalan{' '}
-            {stockUnits ?? 0} adet, günde {dailyDose || 0} adetle bu tarihte biter.
+            Elde kalan {stockUnits ?? 0} adet, günde {dailyDose || 0} adetle bu tarihte biter.
           </Text>
         </View>
+
+        <TimeListField
+          label="İlaç saatleri (günlük hatırlatma)"
+          times={doseTimes}
+          onChange={setDoseTimes}
+        />
 
         <View style={styles.divider} />
 
@@ -139,13 +193,22 @@ export default function EditMedicationScreen() {
           value={hasReport}
           onValueChange={setHasReport}
         />
-
         {hasReport ? (
           <DateField
             label="Rapor bitiş tarihi"
             value={reportEndDate}
             onChange={setReportEndDate}
           />
+        ) : null}
+
+        <SwitchField
+          label="Kutu son kullanma tarihi"
+          description="Karekod okutunca otomatik dolar; elle de girebilirsiniz."
+          value={hasExpiry}
+          onValueChange={setHasExpiry}
+        />
+        {hasExpiry ? (
+          <DateField label="Son kullanma" value={expiryDate} onChange={setExpiryDate} />
         ) : null}
 
         <TextField
@@ -188,4 +251,13 @@ const styles = StyleSheet.create({
   },
   previewHint: { fontSize: fontSize.sm, color: colors.primaryDark, opacity: 0.8 },
   divider: { height: 1, backgroundColor: colors.border, marginBottom: spacing.lg },
+  barcodeNote: {
+    backgroundColor: colors.bg,
+    borderRadius: radius.sm,
+    padding: spacing.md,
+    marginBottom: spacing.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  barcodeText: { fontSize: fontSize.sm, color: colors.textMuted, fontWeight: '600' },
 });

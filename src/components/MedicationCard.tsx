@@ -1,7 +1,7 @@
 // Bir ilacın stok ve rapor durumunu özetleyen kart.
 
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Medication } from '../types';
 import { colors, fontSize, spacing } from '../theme';
 import { Card, Pill, StatusBadge } from './ui';
@@ -11,16 +11,18 @@ import {
   levelForDays,
   stockRunOutDate,
 } from '../utils/status';
-import { formatTR, humanDays, parseISO } from '../utils/date';
+import { daysBetween, formatTR, humanDays, parseISO, today } from '../utils/date';
 
 export function MedicationCard({
   med,
   warnDays,
   onPress,
+  onRefill,
 }: {
   med: Medication;
   warnDays: number;
   onPress?: () => void;
+  onRefill?: () => void;
 }) {
   const stockDays = daysUntilStockOut(med);
   const stockDate = stockRunOutDate(med);
@@ -42,6 +44,13 @@ export function MedicationCard({
       <View style={styles.metaRow}>
         <Pill text={`Günde ${med.dailyDose} adet`} />
         <Pill text={`Stok: ${med.stockUnits} adet`} />
+        {med.doseTimes && med.doseTimes.length > 0 ? (
+          <Pill
+            text={`⏰ ${med.doseTimes.join(', ')}`}
+            color={colors.primaryDark}
+            bg={colors.primaryLight}
+          />
+        ) : null}
       </View>
 
       {/* Stok durumu */}
@@ -72,9 +81,29 @@ export function MedicationCard({
         </View>
       )}
 
+      {med.expiryDate ? <ExpiryLine iso={med.expiryDate} /> : null}
+
       {med.notes ? <Text style={styles.notes}>📝 {med.notes}</Text> : null}
+
+      {onRefill ? (
+        <Pressable onPress={onRefill} style={styles.refillBtn}>
+          <Text style={styles.refillText}>✓ İlaç yazdırdım / stok ekle</Text>
+        </Pressable>
+      ) : null}
     </Card>
   );
+}
+
+function ExpiryLine({ iso }: { iso: string }) {
+  const d = parseISO(iso);
+  const days = daysBetween(today(), d);
+  const expired = days < 0;
+  const near = days >= 0 && days <= 30;
+  const color = expired ? colors.danger : near ? colors.warning : colors.textMuted;
+  const label = expired
+    ? `⚠️ Son kullanma geçti (${formatTR(d)})`
+    : `Son kullanma: ${formatTR(d)}`;
+  return <Text style={[styles.expiry, { color }]}>{label}</Text>;
 }
 
 const styles = StyleSheet.create({
@@ -98,4 +127,13 @@ const styles = StyleSheet.create({
     padding: spacing.sm,
     borderRadius: 8,
   },
+  expiry: { marginTop: spacing.sm, fontSize: fontSize.sm, fontWeight: '600' },
+  refillBtn: {
+    marginTop: spacing.md,
+    backgroundColor: colors.okBg,
+    paddingVertical: spacing.md,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  refillText: { color: colors.ok, fontWeight: '800', fontSize: fontSize.md },
 });
