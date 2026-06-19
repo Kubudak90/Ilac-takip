@@ -14,6 +14,8 @@ import { AppData, DEFAULT_SETTINGS, DoseEvent, Medication, Patient } from '../ty
 
 const STORAGE_KEY = 'ilac-takip:data:v1';
 const CORRUPT_KEY = 'ilac-takip:data:corrupt';
+// Geri yükleme öncesi otomatik anlık yedek (şifreli) — "geri al" için.
+const PRE_RESTORE_KEY = 'ilac-takip:data:pre-restore';
 
 // --- Cihazda şifreleme (at-rest) ---
 // Hassas sağlık verisi (hasta adı, tanı notları, ilaçlar) artık düz metin
@@ -245,6 +247,48 @@ export async function saveData(data: AppData): Promise<void> {
     await AsyncStorage.setItem(STORAGE_KEY, env);
   } catch (e) {
     console.warn('Veri kaydedilemedi:', e);
+  }
+}
+
+// --- Geri yükleme "geri al" anlık yedeği ---
+
+/** Geri yükleme öncesi mevcut veriyi şifreli olarak ayrı anahtara yedekler. */
+export async function savePreRestoreSnapshot(data: AppData): Promise<void> {
+  try {
+    const env = await encryptString(JSON.stringify(data));
+    await AsyncStorage.setItem(PRE_RESTORE_KEY, env);
+  } catch (e) {
+    console.warn('Geri-al yedeği alınamadı:', e);
+  }
+}
+
+/** Geri-al anlık yedeğini çözer (yoksa null). */
+export async function loadPreRestoreSnapshot(): Promise<AppData | null> {
+  try {
+    const raw = await AsyncStorage.getItem(PRE_RESTORE_KEY);
+    if (!raw) return null;
+    const plain = raw.startsWith(ENC_PREFIX) ? await decryptString(raw) : raw;
+    return sanitize(JSON.parse(plain) as Partial<AppData>);
+  } catch {
+    return null;
+  }
+}
+
+/** Geri-al anlık yedeği var mı? */
+export async function hasPreRestoreSnapshot(): Promise<boolean> {
+  try {
+    return (await AsyncStorage.getItem(PRE_RESTORE_KEY)) != null;
+  } catch {
+    return false;
+  }
+}
+
+/** Geri-al anlık yedeğini siler. */
+export async function clearPreRestoreSnapshot(): Promise<void> {
+  try {
+    await AsyncStorage.removeItem(PRE_RESTORE_KEY);
+  } catch {
+    /* önemli değil */
   }
 }
 

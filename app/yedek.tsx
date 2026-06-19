@@ -37,7 +37,7 @@ import { Button, Card, Section } from '@/components/ui';
 import { SwitchField, TextField } from '@/components/forms';
 
 export default function BackupScreen() {
-  const { data, restoreData } = useData();
+  const { data, restoreData, canUndoRestore, undoRestore } = useData();
   const router = useRouter();
 
   const [importText, setImportText] = useState('');
@@ -154,6 +154,30 @@ export default function BackupScreen() {
     }, 30);
   }
 
+  function onUndo() {
+    Alert.alert(
+      'Son geri yüklemeyi geri al',
+      'Son geri yüklemeden önceki verilere dönülsün mü? Şu anki veriler bununla değiştirilir.',
+      [
+        { text: 'Vazgeç', style: 'cancel' },
+        {
+          text: 'Geri dön',
+          style: 'destructive',
+          onPress: async () => {
+            const ok = await undoRestore();
+            Alert.alert(
+              ok ? 'Geri alındı' : 'Yapılamadı',
+              ok
+                ? 'Önceki verilerinize dönüldü.'
+                : 'Geri alınacak bir yedek bulunamadı.',
+              [{ text: 'Tamam', onPress: () => ok && router.back() }],
+            );
+          },
+        },
+      ],
+    );
+  }
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -161,6 +185,24 @@ export default function BackupScreen() {
     >
       <Stack.Screen options={{ title: 'Yedekle / Geri Yükle' }} />
       <ScrollView contentContainerStyle={{ padding: spacing.lg, paddingBottom: spacing.xxl }}>
+        {canUndoRestore ? (
+          <Section title="Son geri yükleme">
+            <Card>
+              <Text style={styles.body}>
+                En son geri yüklemeden önceki verileriniz güvenle saklandı.
+                İsterseniz tek dokunuşla geri dönebilirsiniz.
+              </Text>
+              <Button
+                title="Önceki verilere geri dön"
+                icon="arrow-undo-outline"
+                variant="secondary"
+                onPress={onUndo}
+                disabled={busy}
+              />
+            </Card>
+          </Section>
+        ) : null}
+
         <Section title="Yedek al">
           <Card>
             <Text style={styles.body}>

@@ -12,7 +12,15 @@ import React, {
 } from 'react';
 import { AppState } from 'react-native';
 import { AppData, DoseEvent, Medication, Patient, Settings } from '../types';
-import { emptyData, loadData, saveData } from './storage';
+import {
+  clearPreRestoreSnapshot,
+  emptyData,
+  hasPreRestoreSnapshot,
+  loadData,
+  loadPreRestoreSnapshot,
+  savePreRestoreSnapshot,
+  saveData,
+} from './storage';
 import {
   getNotificationPermissionGranted,
   onAppForeground,
@@ -65,6 +73,10 @@ interface DataContextValue {
 
   /** Yedekten geri yükle: tüm veriyi içe aktarılan veriyle değiştirir. */
   restoreData: (incoming: AppData) => void;
+  /** Son geri yükleme geri alınabilir mi (öncesinde anlık yedek var mı)? */
+  canUndoRestore: boolean;
+  /** Son geri yüklemeyi geri al: önceki veriye dön. Başarılıysa true. */
+  undoRestore: () => Promise<boolean>;
 
   // Barkod defteri
   /** Okutulan GTIN için kayıtlı ilaç adı (varsa). */
@@ -80,6 +92,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
   const [notificationsGranted, setNotificationsGranted] = useState(true);
+  const [canUndoRestore, setCanUndoRestore] = useState(false);
 
   // İlk yüklenen veri referansı: kaydetme efekti "veri gerçekten değişti mi?"
   // kararını bu referansla verir (bkz. aşağıdaki efekt).
@@ -101,6 +114,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         setData(loaded.data);
         setLoadFailed(!loaded.ok);
         setLoading(false);
+        // Önceki oturumdan kalan geri-al yedeği varsa "geri al" sun.
+        void hasPreRestoreSnapshot().then((has) => {
+          if (active) setCanUndoRestore(has);
+        });
       }
     })();
     return () => {
@@ -329,6 +346,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   // --- Geri yükleme ---
   const restoreData = useCallback((incoming: AppData) => {
+    // Üzerine yazmadan ÖNCE mevcut veriyi şifreli anlık yedeğe al (geri-al).
+    void savePreRestoreSnapshot(dataRef.current);
+    setCanUndoRestore(true);
     // Kullanıcı bilinçli olarak üzerine yazıyor: kayıt kilidini aç, uyarıyı kaldır.
     loadOkRef.current = true;
     setLoadFailed(false);
@@ -339,6 +359,20 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       settings: { ...emptyData.settings, ...(incoming.settings ?? {}) },
       barcodeBook: incoming.barcodeBook ?? {},
     }));
+  }, []);
+
+  const undoRestore = useCallback(async () => {
+    const snap = await loadPreRestoreSnapshot();
+    if (!snap) {
+      setCanUndoRestore(false);
+      return false;
+    }
+    loadOkRef.current = true;
+    setLoadFailed(false);
+    setData(snap);
+    await clearPreRestoreSnapshot();
+    setCanUndoRestore(false);
+    return true;
   }, []);
 
   // --- Barkod defteri ---
@@ -388,6 +422,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       setDoseStatus,
       updateSettings,
       restoreData,
+      canUndoRestore,
+      undoRestore,
       lookupBarcode,
       saveBarcodeName,
     }),
@@ -409,6 +445,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       setDoseStatus,
       updateSettings,
       restoreData,
+      canUndoRestore,
+      undoRestore,
       lookupBarcode,
       saveBarcodeName,
     ],
