@@ -64,6 +64,12 @@ export default function SettingsScreen() {
             value={s.notificationsEnabled}
             onValueChange={onToggleNotifications}
           />
+          <SwitchField
+            label="Bildirimde adı gizle"
+            description="Açıkken kilit ekranında hasta/ilaç adı görünmez; ayrıntı için uygulamayı açarsınız."
+            value={s.hideSensitiveNotifications}
+            onValueChange={(v) => updateSettings({ hideSensitiveNotifications: v })}
+          />
         </Card>
       </Section>
 

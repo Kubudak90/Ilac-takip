@@ -89,6 +89,8 @@ export interface Settings {
   reminderHour: number;
   /** Uygulama açılışında/öne gelince biyometri/cihaz kilidi istensin mi */
   appLockEnabled: boolean;
+  /** Bildirimlerde hasta/ilaç adı gizlensin mi (kilit ekranı gizliliği) */
+  hideSensitiveNotifications: boolean;
 }
 
 export interface AppData {
@@ -109,4 +111,5 @@ export const DEFAULT_SETTINGS: Settings = {
   notificationsEnabled: true,
   reminderHour: 9,
   appLockEnabled: false,
+  hideSensitiveNotifications: false,
 };

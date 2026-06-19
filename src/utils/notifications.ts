@@ -71,6 +71,9 @@ async function ensureAndroidChannel(): Promise<void> {
       importance: Notifications.AndroidImportance.HIGH,
       vibrationPattern: [0, 250, 250, 250],
       lightColor: '#0F766E',
+      // Kilit ekranında içeriği OS gizlesin (sağlık verisi); bildirim görünür
+      // ama metni güvenli kilit ekranında redakte edilir.
+      lockscreenVisibility: Notifications.AndroidNotificationVisibility.PRIVATE,
     });
   } catch {
     /* bildirim modülü yoksa sessizce geç */
@@ -123,6 +126,8 @@ async function doReschedule(
   const patientName = new Map(patients.map((p) => [p.id, p.fullName]));
   const now = new Date();
   let budget = SCHEDULE_BUDGET;
+  // Gizlilik: açıksa bildirim gövdesinde hasta/ilaç adı geçmez (kilit ekranı).
+  const hide = settings.hideSensitiveNotifications;
 
   // 1) Günlük "ilaç saati" hatırlatmaları — saat dilimine göre BİRLEŞTİRİLİR.
   //    Stoğu tükenmiş ilaçlar atlanır (boşuna "al" demeyelim).
@@ -153,7 +158,9 @@ async function doReschedule(
       await Notifications.scheduleNotificationAsync({
         content: {
           title: `⏰ İlaç saati ${time}`,
-          body: list.join('\n'),
+          body: hide
+            ? `${list.length} ilaç alınacak — ayrıntı için uygulamayı açın`
+            : list.join('\n'),
           data: { kind: 'dose', time },
         },
         trigger: {
@@ -173,9 +180,11 @@ async function doReschedule(
   //     yerine her gün yenileme çağrısı yapılır (refill edilince düşer).
   const depleted = medications.filter((m) => isDepleted(m));
   if (depleted.length > 0 && budget > 0) {
-    const body = depleted
-      .map((m) => `${patientName.get(m.patientId) ?? 'Hasta'} — ${m.name}`)
-      .join('\n');
+    const body = hide
+      ? `${depleted.length} ilaç bitti — ayrıntı için uygulamayı açın`
+      : depleted
+          .map((m) => `${patientName.get(m.patientId) ?? 'Hasta'} — ${m.name}`)
+          .join('\n');
     try {
       await Notifications.scheduleNotificationAsync({
         content: {
@@ -211,13 +220,14 @@ async function doReschedule(
     const labelSoon = labelFor(item.kind, item.medication.name, false);
     const labelDue = labelFor(item.kind, item.medication.name, true);
     const tail = `${who} — ${formatTR(item.date)}. Reçete/rapor için planlama yapın.`;
+    const hidden = 'Bir hatırlatma var — ayrıntı için uygulamayı açın.';
 
     budget = await scheduleOneShot(
       preWarn,
       now,
       `${item.medication.id}:${item.kind}:pre`,
       '💊 İlaç Takip Hatırlatması',
-      `${labelSoon}. ${tail}`,
+      hide ? hidden : `${labelSoon}. ${tail}`,
       { medicationId: item.medication.id, kind: item.kind, stage: 'pre' },
       budget,
     );
@@ -227,7 +237,7 @@ async function doReschedule(
       now,
       `${item.medication.id}:${item.kind}:due`,
       '💊 İlaç Takip Hatırlatması',
-      `${labelDue}. ${tail}`,
+      hide ? hidden : `${labelDue}. ${tail}`,
       { medicationId: item.medication.id, kind: item.kind, stage: 'due' },
       budget,
     );
