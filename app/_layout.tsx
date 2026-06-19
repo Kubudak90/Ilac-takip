@@ -3,6 +3,7 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { DataProvider } from '@/store/DataContext';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { LockGate } from '@/components/LockGate';
 import { requestNotificationPermission } from '@/utils/notifications';
 import { colors } from '@/theme';
@@ -15,6 +16,7 @@ export default function RootLayout() {
 
   return (
     <SafeAreaProvider>
+      <ErrorBoundary>
       <DataProvider>
         <StatusBar style="light" />
         <LockGate>
@@ -55,6 +57,7 @@ export default function RootLayout() {
         </Stack>
         </LockGate>
       </DataProvider>
+      </ErrorBoundary>
     </SafeAreaProvider>
   );
 }
