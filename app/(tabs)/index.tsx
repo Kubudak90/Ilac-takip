@@ -12,7 +12,7 @@ import { Card, EmptyState, Loading, StatusBadge } from '@/components/ui';
 import { DoseList } from '@/components/DoseList';
 
 export default function DashboardScreen() {
-  const { data, loading, loadFailed, notificationsGranted, getPatient, setDoseStatus } =
+  const { data, loading, loadFailed, notificationsGranted, notifDropped, getPatient, setDoseStatus } =
     useData();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -101,6 +101,17 @@ export default function DashboardScreen() {
             Bildirim izni kapalı — hatırlatmalar gelmiyor. Açmak için dokunun.
           </Text>
         </Pressable>
+      ) : null}
+
+      {/* Cihaz/bütçe sınırı: bazı hatırlatmalar planlanamadı (sessiz düşürme yerine uyar) */}
+      {notifDropped > 0 ? (
+        <View style={styles.dropBanner}>
+          <Ionicons name="warning-outline" size={20} color={colors.warning} />
+          <Text style={styles.dropBannerText}>
+            {notifDropped} hatırlatma cihaz sınırı nedeniyle planlanamadı. İlaç
+            saati sayısını azaltmayı veya uyarı gününü düşürmeyi deneyin.
+          </Text>
+        </View>
       ) : null}
 
       {/* Tükenen ilaçlar — en acil eylem: hemen yenile */}
@@ -299,6 +310,21 @@ const styles = StyleSheet.create({
   permBannerText: {
     flex: 1,
     color: colors.danger,
+    fontWeight: '700',
+    fontSize: fontSize.sm,
+  },
+  dropBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.warningBg,
+    borderRadius: 12,
+    padding: spacing.md,
+    marginBottom: spacing.lg,
+  },
+  dropBannerText: {
+    flex: 1,
+    color: colors.warning,
     fontWeight: '700',
     fontSize: fontSize.sm,
   },

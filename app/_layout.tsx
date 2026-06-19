@@ -6,6 +6,7 @@ import { DataProvider } from '@/store/DataContext';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { LockGate } from '@/components/LockGate';
 import { ConsentGate } from '@/components/ConsentGate';
+import { NotificationRouter } from '@/components/NotificationRouter';
 import { requestNotificationPermission } from '@/utils/notifications';
 import { colors } from '@/theme';
 
@@ -22,6 +23,7 @@ export default function RootLayout() {
         <StatusBar style="light" />
         <LockGate>
         <ConsentGate>
+        <NotificationRouter />
         <Stack
           screenOptions={{
             headerStyle: { backgroundColor: colors.primary },

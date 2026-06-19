@@ -41,6 +41,8 @@ interface DataContextValue {
   loadFailed: boolean;
   /** Sistem bildirim izni verilmiş mi (ayar açık olsa bile false olabilir). */
   notificationsGranted: boolean;
+  /** Cihaz/bütçe sınırı nedeniyle planlanamayan hatırlatma sayısı (0 = sorun yok). */
+  notifDropped: number;
 
   // Hasta
   addPatient: (p: Omit<Patient, 'id' | 'createdAt'>) => string;
@@ -96,6 +98,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [loadFailed, setLoadFailed] = useState(false);
   const [notificationsGranted, setNotificationsGranted] = useState(true);
   const [canUndoRestore, setCanUndoRestore] = useState(false);
+  const [notifDropped, setNotifDropped] = useState(0);
 
   // İlk yüklenen veri referansı: kaydetme efekti "veri gerçekten değişti mi?"
   // kararını bu referansla verir (bkz. aşağıdaki efekt).
@@ -147,17 +150,17 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     // Depo okunamadı/bozuktu: kurtarılabilir veriyi ezmemek için ASLA yazma.
     // Bildirimleri yine de bellekteki güncel veriye göre kur.
     if (!loadOkRef.current) {
-      rescheduleAll(data.patients, data.medications, data.settings);
+      rescheduleAll(data.patients, data.medications, data.settings).then(setNotifDropped);
       return;
     }
     const changed = data !== loadedRef.current;
     if (!changed) {
-      rescheduleAll(data.patients, data.medications, data.settings);
+      rescheduleAll(data.patients, data.medications, data.settings).then(setNotifDropped);
       return;
     }
     const t = setTimeout(() => {
       saveData(data);
-      rescheduleAll(data.patients, data.medications, data.settings);
+      rescheduleAll(data.patients, data.medications, data.settings).then(setNotifDropped);
     }, 400);
     return () => clearTimeout(t);
   }, [data, loading]);
@@ -178,7 +181,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     refreshPermission();
     const unsub = onAppForeground(() => {
       const d = dataRef.current;
-      rescheduleAll(d.patients, d.medications, d.settings);
+      rescheduleAll(d.patients, d.medications, d.settings).then(setNotifDropped);
       refreshPermission();
     });
     return () => {
@@ -386,7 +389,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     setCanUndoRestore(false);
     setData(emptyData);
     // Planlı tüm bildirimleri iptal et.
-    void rescheduleAll([], [], emptyData.settings);
+    rescheduleAll([], [], emptyData.settings).then(setNotifDropped);
   }, []);
 
   // --- Barkod defteri ---
@@ -423,6 +426,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       loading,
       loadFailed,
       notificationsGranted,
+      notifDropped,
       addPatient,
       updatePatient,
       deletePatient,
@@ -447,6 +451,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       loading,
       loadFailed,
       notificationsGranted,
+      notifDropped,
       addPatient,
       updatePatient,
       deletePatient,

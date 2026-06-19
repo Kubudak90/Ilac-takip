@@ -97,35 +97,46 @@ export function rescheduleAll(
   patients: Patient[],
   medications: Medication[],
   settings: Settings,
-): Promise<void> {
-  rescheduleLock = rescheduleLock
+): Promise<number> {
+  // Serileştirme kilidini koru ama planlanamayan sayısını çağırana döndür.
+  const run = rescheduleLock
     .catch(() => {})
     .then(() => doReschedule(patients, medications, settings));
-  return rescheduleLock;
+  rescheduleLock = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
 }
 
+/**
+ * Tüm planlı bildirimleri kurar; cihaz/bütçe sınırı (iOS 64 ≈ 58) nedeniyle
+ * PLANLANAMAYAN öğe sayısını döndürür (0 = hepsi kuruldu). UI bu sayı > 0 ise
+ * kullanıcıyı uyarır (sessiz düşürme yerine).
+ */
 async function doReschedule(
   patients: Patient[],
   medications: Medication[],
   settings: Settings,
-): Promise<void> {
+): Promise<number> {
   try {
     await Notifications.cancelAllScheduledNotificationsAsync();
   } catch {
     // bildirim modülü yoksa (ör. bazı web ortamları) sessizce geç
-    return;
+    return 0;
   }
 
-  if (!settings.notificationsEnabled) return;
+  if (!settings.notificationsEnabled) return 0;
   // Ayar "açık" olsa bile gerçek sistem izni yoksa planlama yapma; aksi halde
   // her şey sessizce başarısız olur (kullanıcı "açık" sanır). UI bu durumu
   // ayrıca bir uyarı bandıyla bildirir (bkz. notificationsGranted).
-  if (!(await getNotificationPermissionGranted())) return;
+  if (!(await getNotificationPermissionGranted())) return 0;
   await ensureAndroidChannel();
 
   const patientName = new Map(patients.map((p) => [p.id, p.fullName]));
   const now = new Date();
   let budget = SCHEDULE_BUDGET;
+  let dropped = 0; // bütçe nedeniyle planlanamayan öğe sayısı
   // Gizlilik: açıksa bildirim gövdesinde hasta/ilaç adı geçmez (kilit ekranı).
   const hide = settings.hideSensitiveNotifications;
 
@@ -149,8 +160,12 @@ async function doReschedule(
   }
 
   const sortedTimes = [...byTime.keys()].sort();
-  for (const time of sortedTimes) {
-    if (budget <= 0) break;
+  for (let ti = 0; ti < sortedTimes.length; ti++) {
+    if (budget <= 0) {
+      dropped += sortedTimes.length - ti;
+      break;
+    }
+    const time = sortedTimes[ti];
     const [hh, mm] = time.split(':').map((x) => parseInt(x, 10));
     if (Number.isNaN(hh) || Number.isNaN(mm)) continue;
     const list = byTime.get(time)!;
@@ -179,6 +194,7 @@ async function doReschedule(
   //     bitmiş ilaçlar yukarıda "al" listesinden çıkarıldı; sessiz kalmak
   //     yerine her gün yenileme çağrısı yapılır (refill edilince düşer).
   const depleted = medications.filter((m) => isDepleted(m));
+  if (depleted.length > 0 && budget <= 0) dropped += 1;
   if (depleted.length > 0 && budget > 0) {
     const body = hide
       ? `${depleted.length} ilaç bitti — ayrıntı için uygulamayı açın`
@@ -208,8 +224,12 @@ async function doReschedule(
   //    Her öğe için iki kademe: (a) eşik gün kala ön-uyarı, (b) bitiş günü.
   const items = buildUrgencyList(medications, settings.warnDaysBefore);
 
-  for (const item of items) {
-    if (budget <= 0) break;
+  for (let ii = 0; ii < items.length; ii++) {
+    if (budget <= 0) {
+      dropped += items.length - ii;
+      break;
+    }
+    const item = items[ii];
     const who = patientName.get(item.medication.patientId) ?? 'Hasta';
 
     const preWarn = new Date(addDays(startOfDay(item.date), -settings.warnDaysBefore));
@@ -242,6 +262,8 @@ async function doReschedule(
       budget,
     );
   }
+
+  return dropped;
 }
 
 function labelFor(
