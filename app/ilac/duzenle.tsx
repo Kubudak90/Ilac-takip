@@ -97,6 +97,8 @@ export default function EditMedicationScreen() {
       name: trimmed,
       dailyDose,
       stockUnits: stockUnits ?? 0,
+      // Stok bir kez girilince (>0) takip kalıcı olur; tükense bile true kalır.
+      trackStock: (stockUnits ?? 0) > 0 ? true : existing?.trackStock,
       stockUpdatedAt:
         stockChanged || !existing ? toISODate(today()) : existing.stockUpdatedAt,
       doseTimes: doseTimes.length ? doseTimes : undefined,

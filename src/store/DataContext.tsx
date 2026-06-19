@@ -247,6 +247,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
               ...m,
               stockUnits: newStockUnits,
               stockUpdatedAt: new Date().toISOString(),
+              // Yenileme = stok takibi yapılıyor demektir.
+              trackStock: true,
             }
           : m,
       ),

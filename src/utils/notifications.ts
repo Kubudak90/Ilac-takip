@@ -14,7 +14,7 @@
 import { AppState, Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import { Medication, Patient, Settings } from '../types';
-import { buildUrgencyList } from './status';
+import { buildUrgencyList, isDepleted } from './status';
 import { addDays, formatTR, startOfDay } from './date';
 
 Notifications.setNotificationHandler({
@@ -129,10 +129,11 @@ async function doReschedule(
   const byTime = new Map<string, string[]>(); // "HH:MM" -> ["Ayşe — Coraspin", ...]
   for (const med of medications) {
     if (!med.doseTimes || med.doseTimes.length === 0) continue;
-    // GÜVENLİK: Günlük "ilaç saati" hatırlatması, stok TAHMİNİNE göre
-    // SUSTURULMAZ. currentRemainingUnits yalnızca bir tahmindir (gerçek alım
-    // kaydı yok); ilaç hâlâ elde olabilir ve hasta dozu almalı. Stok bitişi
-    // ayrı bir uyarıyla bildirilir (aşağıdaki buildUrgencyList -> kind:'stock').
+    // Stoğu GERÇEKTEN tükenmiş (trackStock + sayım 0) ilaçta "al" demek yanlış
+    // olur; bunları aşağıdaki günlük "yenile" eskalasyonuna bırakırız. Salt-
+    // hatırlatma ilaçları (stok takip edilmeyen) bundan ETKİLENMEZ — hatırlatma
+    // sürer; yani stok TAHMİNİYLE susturma yapılmaz.
+    if (isDepleted(med)) continue;
     const who = patientName.get(med.patientId) ?? 'Hasta';
     for (const time of med.doseTimes) {
       if (!/^\d{1,2}:\d{2}$/.test(time)) continue;
@@ -164,6 +165,33 @@ async function doReschedule(
       budget--;
     } catch (e) {
       console.warn('İlaç saati bildirimi planlanamadı:', e);
+    }
+  }
+
+  // 1b) TÜKENEN ilaçlar: günlük "yenile" eskalasyonu (tek bildirim). Stoğu
+  //     bitmiş ilaçlar yukarıda "al" listesinden çıkarıldı; sessiz kalmak
+  //     yerine her gün yenileme çağrısı yapılır (refill edilince düşer).
+  const depleted = medications.filter((m) => isDepleted(m));
+  if (depleted.length > 0 && budget > 0) {
+    const body = depleted
+      .map((m) => `${patientName.get(m.patientId) ?? 'Hasta'} — ${m.name}`)
+      .join('\n');
+    try {
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: '⚠️ Biten ilaç(lar) — yenileyin',
+          body,
+          data: { kind: 'depleted' },
+        },
+        trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.DAILY,
+          hour: settings.reminderHour,
+          minute: 0,
+        },
+      });
+      budget--;
+    } catch (e) {
+      console.warn('Tükenme eskalasyonu planlanamadı:', e);
     }
   }
 

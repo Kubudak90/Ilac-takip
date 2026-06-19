@@ -4,7 +4,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useData } from '@/store/DataContext';
-import { buildUrgencyList, UrgencyItem } from '@/utils/status';
+import { buildUrgencyList, isDepleted, UrgencyItem } from '@/utils/status';
 import { indexLog, scheduledDosesForDate } from '@/utils/adherence';
 import { formatTR, humanDays, todayKey } from '@/utils/date';
 import { colors, fontSize, spacing, statusBg, statusColor } from '@/theme';
@@ -17,10 +17,18 @@ export default function DashboardScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
-  const items = useMemo(
-    () => buildUrgencyList(data.medications, data.settings.warnDaysBefore),
-    [data.medications, data.settings.warnDaysBefore],
+  // Stoğu tükenmiş (takip edilen) ilaçlar — en üstte ayrı, eyleme dönük kategori.
+  const depletedMeds = useMemo(
+    () => data.medications.filter(isDepleted),
+    [data.medications],
   );
+  const items = useMemo(() => {
+    const depletedIds = new Set(depletedMeds.map((m) => m.id));
+    // Tükenen stok kalemlerini "Dikkat gerekenler"den çıkar (Tükendi'de gösterilir).
+    return buildUrgencyList(data.medications, data.settings.warnDaysBefore).filter(
+      (it) => !(it.kind === 'stock' && depletedIds.has(it.medication.id)),
+    );
+  }, [data.medications, data.settings.warnDaysBefore, depletedMeds]);
 
   // Bugün alınacak dozlar (yalnızca doz saati tanımlı ilaçlar).
   const todayK = todayKey();
@@ -93,6 +101,37 @@ export default function DashboardScreen() {
             Bildirim izni kapalı — hatırlatmalar gelmiyor. Açmak için dokunun.
           </Text>
         </Pressable>
+      ) : null}
+
+      {/* Tükenen ilaçlar — en acil eylem: hemen yenile */}
+      {depletedMeds.length > 0 ? (
+        <View style={styles.todaySection}>
+          <View style={styles.headingRow}>
+            <Ionicons name="alert-circle" size={20} color={colors.danger} />
+            <Text style={[styles.heading, { color: colors.danger }]}>
+              Tükendi — hemen yenileyin ({depletedMeds.length})
+            </Text>
+          </View>
+          {depletedMeds.map((m) => (
+            <Card key={m.id} onPress={() => router.push(`/ilac/yenile?id=${m.id}`)}>
+              <View style={styles.rowTop}>
+                <Ionicons
+                  name="medkit"
+                  size={18}
+                  color={colors.danger}
+                  style={{ marginRight: 6, marginTop: 3 }}
+                />
+                <Text style={styles.rowMed} numberOfLines={2}>
+                  {m.name}
+                </Text>
+              </View>
+              <Text style={styles.rowPatient}>
+                {getPatient(m.patientId)?.fullName ?? 'Hasta'}
+              </Text>
+              <StatusBadge level="danger" label="Stok bitti · yenile" />
+            </Card>
+          ))}
+        </View>
       ) : null}
 
       {/* Bugün alınacak dozlar — günlük asıl eylem */}

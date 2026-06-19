@@ -32,6 +32,12 @@ export interface Medication {
   stockUnits: number;
   /** stockUnits değerinin girildiği/güncellendiği tarih (ISO) */
   stockUpdatedAt: string;
+  /**
+   * Bu ilacın stoğu takip ediliyor mu? Stok bir kez girilince (>0) kalıcı olarak
+   * true olur ve sonradan 0'a düşse (tükense) bile true kalır — böylece "tükendi"
+   * ile "stok hiç girilmedi" ayırt edilir. Salt-hatırlatma ilaçlarında false.
+   */
+  trackStock?: boolean;
   /** Raporlu ilaç mı? */
   hasReport: boolean;
   /** Rapor bitiş tarihi (ISO, sadece hasReport=true ise anlamlı) */

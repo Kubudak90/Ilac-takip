@@ -50,6 +50,15 @@ export function stockCountAgeDays(med: Medication): number {
   return Math.max(0, daysBetween(parseISO(med.stockUpdatedAt), today()));
 }
 
+/**
+ * İlaç STOĞU TÜKENMİŞ mi? Yalnızca stok takibi yapılan (trackStock) ilaçlarda
+ * anlamlıdır; salt-hatırlatma ilaçlarında (stok hiç girilmemiş) false döner.
+ * Böylece "tükendi" ile "stok takip edilmiyor" karışmaz.
+ */
+export function isDepleted(med: Medication): boolean {
+  return !!med.trackStock && med.dailyDose > 0 && currentRemainingUnits(med) <= 0;
+}
+
 /** Bugünden rapor bitişine kalan gün. Rapor yoksa null. */
 export function daysUntilReportEnd(med: Medication): number | null {
   if (!med.hasReport || !med.reportEndDate) return null;

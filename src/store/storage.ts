@@ -138,6 +138,11 @@ function sanitize(parsed: Partial<AppData>): AppData {
             typeof m.stockUpdatedAt === 'string'
               ? m.stockUpdatedAt
               : new Date().toISOString(),
+          // Migrasyon: trackStock yoksa, mevcut stok>0 ise takip ediliyor say.
+          trackStock:
+            typeof m.trackStock === 'boolean'
+              ? m.trackStock
+              : isFiniteNumber(m.stockUnits) && m.stockUnits > 0,
         }))
         // Sahibi silinmiş ilaçları düşür (sızıntıyı önle)
         .filter((m) => patientIds.has(m.patientId))
