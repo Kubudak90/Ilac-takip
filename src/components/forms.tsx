@@ -22,6 +22,7 @@ export function TextField({
   placeholder,
   multiline,
   keyboardType,
+  secureTextEntry,
 }: {
   label: string;
   value: string;
@@ -29,6 +30,7 @@ export function TextField({
   placeholder?: string;
   multiline?: boolean;
   keyboardType?: 'default' | 'numeric';
+  secureTextEntry?: boolean;
 }) {
   return (
     <View style={styles.field}>
@@ -41,6 +43,9 @@ export function TextField({
         placeholderTextColor={colors.textLight}
         multiline={multiline}
         keyboardType={keyboardType}
+        secureTextEntry={secureTextEntry}
+        autoCapitalize={secureTextEntry ? 'none' : undefined}
+        autoCorrect={secureTextEntry ? false : undefined}
       />
     </View>
   );

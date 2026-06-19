@@ -266,3 +266,62 @@ export function parseBackup(text: string): AppData {
   }
   return sanitize(candidate as Partial<AppData>);
 }
+
+// --- Parola ile şifreli yedek (opsiyonel) ---
+// Yedek dosyası, kullanıcının belirlediği bir parola ile şifrelenebilir:
+// parola -> PBKDF2-SHA256 (salt) -> 256-bit anahtar -> AES-CBC. Böylece dışa
+// aktarılan dosya çalınsa bile parola olmadan PHI okunamaz.
+const BACKUP_ENC = 'pbkdf2-aes-cbc';
+const BACKUP_ITER = 100000;
+
+/** Bir metin parola-şifreli yedek zarfı mı? (içe aktarımda saptama) */
+export function isEncryptedBackup(text: string): boolean {
+  try {
+    const o = JSON.parse(text);
+    return !!o && o.enc === BACKUP_ENC && typeof o.ct === 'string';
+  } catch {
+    return false;
+  }
+}
+
+/** Yedek metnini parola ile şifreler; paylaşılabilir bir zarf (JSON) döndürür. */
+export async function encryptBackup(text: string, password: string): Promise<string> {
+  const saltHex = bytesToHex(await Crypto.getRandomBytesAsync(16));
+  const ivHex = bytesToHex(await Crypto.getRandomBytesAsync(16));
+  const key = CryptoJS.PBKDF2(password, CryptoJS.enc.Hex.parse(saltHex), {
+    keySize: 256 / 32,
+    iterations: BACKUP_ITER,
+    hasher: CryptoJS.algo.SHA256,
+  });
+  const enc = CryptoJS.AES.encrypt(text, key, { iv: CryptoJS.enc.Hex.parse(ivHex) });
+  return JSON.stringify({
+    app: 'ilac-takip',
+    enc: BACKUP_ENC,
+    v: 1,
+    iter: BACKUP_ITER,
+    salt: saltHex,
+    iv: ivHex,
+    ct: enc.ciphertext.toString(CryptoJS.enc.Base64),
+  });
+}
+
+/** Şifreli yedeği parola ile çözer. Parola yanlışsa hata fırlatır. */
+export function decryptBackup(text: string, password: string): string {
+  const o = JSON.parse(text);
+  if (!o || o.enc !== BACKUP_ENC || typeof o.ct !== 'string') {
+    throw new Error('Şifreli yedek biçimi tanınmadı.');
+  }
+  const key = CryptoJS.PBKDF2(password, CryptoJS.enc.Hex.parse(o.salt), {
+    keySize: 256 / 32,
+    iterations: typeof o.iter === 'number' ? o.iter : BACKUP_ITER,
+    hasher: CryptoJS.algo.SHA256,
+  });
+  const dec = CryptoJS.AES.decrypt(
+    CryptoJS.lib.CipherParams.create({ ciphertext: CryptoJS.enc.Base64.parse(o.ct) }),
+    key,
+    { iv: CryptoJS.enc.Hex.parse(o.iv) },
+  );
+  const plain = dec.toString(CryptoJS.enc.Utf8);
+  if (!plain) throw new Error('Parola yanlış olabilir.');
+  return plain;
+}
