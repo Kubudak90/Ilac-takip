@@ -292,6 +292,21 @@ export async function clearPreRestoreSnapshot(): Promise<void> {
   }
 }
 
+/** TÜM uygulama verisini kalıcı olarak siler (veri + bozuk + geri-al + anahtar). */
+export async function clearAllData(): Promise<void> {
+  try {
+    await AsyncStorage.multiRemove([STORAGE_KEY, CORRUPT_KEY, PRE_RESTORE_KEY]);
+  } catch (e) {
+    console.warn('Veri silinemedi:', e);
+  }
+  try {
+    await SecureStore.deleteItemAsync(ENC_KEY_NAME);
+  } catch {
+    /* anahtar yoksa sorun değil */
+  }
+  cachedKey = null;
+}
+
 // --- Yedekleme / geri yükleme (kullanıcı dışa/içe aktarımı) ---
 
 /** Tüm veriyi paylaşılabilir/yedeklenebilir JSON metnine çevirir. */

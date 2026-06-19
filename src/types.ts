@@ -91,6 +91,8 @@ export interface Settings {
   appLockEnabled: boolean;
   /** Bildirimlerde hasta/ilaç adı gizlensin mi (kilit ekranı gizliliği) */
   hideSensitiveNotifications: boolean;
+  /** İlk açılış gizlilik/KVKK aydınlatması kabul edildi mi */
+  privacyAccepted: boolean;
 }
 
 export interface AppData {
@@ -112,4 +114,5 @@ export const DEFAULT_SETTINGS: Settings = {
   reminderHour: 9,
   appLockEnabled: false,
   hideSensitiveNotifications: false,
+  privacyAccepted: false,
 };

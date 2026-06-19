@@ -13,6 +13,7 @@ import React, {
 import { AppState } from 'react-native';
 import { AppData, DoseEvent, Medication, Patient, Settings } from '../types';
 import {
+  clearAllData,
   clearPreRestoreSnapshot,
   emptyData,
   hasPreRestoreSnapshot,
@@ -77,6 +78,8 @@ interface DataContextValue {
   canUndoRestore: boolean;
   /** Son geri yüklemeyi geri al: önceki veriye dön. Başarılıysa true. */
   undoRestore: () => Promise<boolean>;
+  /** Tüm verileri kalıcı olarak siler (fabrika ayarına döner). */
+  deleteAllData: () => Promise<void>;
 
   // Barkod defteri
   /** Okutulan GTIN için kayıtlı ilaç adı (varsa). */
@@ -375,6 +378,17 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     return true;
   }, []);
 
+  const deleteAllData = useCallback(async () => {
+    await clearAllData();
+    loadOkRef.current = true;
+    loadedRef.current = emptyData;
+    setLoadFailed(false);
+    setCanUndoRestore(false);
+    setData(emptyData);
+    // Planlı tüm bildirimleri iptal et.
+    void rescheduleAll([], [], emptyData.settings);
+  }, []);
+
   // --- Barkod defteri ---
   const lookupBarcode = useCallback(
     (gtin: string) => data.barcodeBook[gtin],
@@ -424,6 +438,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       restoreData,
       canUndoRestore,
       undoRestore,
+      deleteAllData,
       lookupBarcode,
       saveBarcodeName,
     }),
@@ -447,6 +462,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       restoreData,
       canUndoRestore,
       undoRestore,
+      deleteAllData,
       lookupBarcode,
       saveBarcodeName,
     ],

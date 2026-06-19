@@ -15,7 +15,7 @@ const WARN_OPTIONS = [3, 5, 7, 10, 14];
 const HOUR_OPTIONS = [8, 9, 10, 12, 18, 20];
 
 export default function SettingsScreen() {
-  const { data, loading, updateSettings } = useData();
+  const { data, loading, updateSettings, deleteAllData } = useData();
   const router = useRouter();
 
   if (loading) return <Loading />;
@@ -52,6 +52,32 @@ export default function SettingsScreen() {
       if (!ok) return;
     }
     updateSettings({ appLockEnabled: v });
+  }
+
+  function onDeleteAll() {
+    Alert.alert(
+      'Tüm verileri sil',
+      'Tüm hastalar, ilaçlar ve doz kayıtları KALICI olarak silinecek; bu işlem geri alınamaz. Önce yedek aldığınızdan emin olun.',
+      [
+        { text: 'Vazgeç', style: 'cancel' },
+        {
+          text: 'Sil',
+          style: 'destructive',
+          onPress: () =>
+            Alert.alert('Son onay', 'Tüm veriler kalıcı olarak silinsin mi?', [
+              { text: 'Vazgeç', style: 'cancel' },
+              {
+                text: 'Evet, sil',
+                style: 'destructive',
+                onPress: async () => {
+                  await deleteAllData();
+                  Alert.alert('Silindi', 'Tüm veriler silindi.');
+                },
+              },
+            ]),
+        },
+      ],
+    );
   }
 
   return (
@@ -129,6 +155,24 @@ export default function SettingsScreen() {
             icon="save-outline"
             variant="secondary"
             onPress={() => router.push('/yedek')}
+          />
+        </Card>
+      </Section>
+
+      <Section title="Gizlilik ve veri">
+        <Card>
+          <Button
+            title="Gizlilik ve KVKK"
+            icon="shield-checkmark-outline"
+            variant="secondary"
+            onPress={() => router.push('/gizlilik')}
+          />
+          <Button
+            title="Tüm verileri sil"
+            icon="trash-outline"
+            variant="danger"
+            onPress={onDeleteAll}
+            style={{ marginTop: spacing.md }}
           />
         </Card>
       </Section>

@@ -5,6 +5,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { DataProvider } from '@/store/DataContext';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { LockGate } from '@/components/LockGate';
+import { ConsentGate } from '@/components/ConsentGate';
 import { requestNotificationPermission } from '@/utils/notifications';
 import { colors } from '@/theme';
 
@@ -20,6 +21,7 @@ export default function RootLayout() {
       <DataProvider>
         <StatusBar style="light" />
         <LockGate>
+        <ConsentGate>
         <Stack
           screenOptions={{
             headerStyle: { backgroundColor: colors.primary },
@@ -54,7 +56,12 @@ export default function RootLayout() {
             options={{ title: 'Yedekle / Geri Yükle', presentation: 'modal' }}
           />
           <Stack.Screen name="uyum" options={{ title: 'Uyum Geçmişi' }} />
+          <Stack.Screen
+            name="gizlilik"
+            options={{ title: 'Gizlilik', presentation: 'modal' }}
+          />
         </Stack>
+        </ConsentGate>
         </LockGate>
       </DataProvider>
       </ErrorBoundary>
