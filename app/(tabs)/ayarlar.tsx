@@ -6,6 +6,7 @@ import {
   requestNotificationPermission,
   sendTestNotification,
 } from '@/utils/notifications';
+import { authenticate, canUseAppLock } from '@/utils/auth';
 import { colors, fontSize, radius, spacing } from '@/theme';
 import { Button, Card, Loading, Section } from '@/components/ui';
 import { SwitchField } from '@/components/forms';
@@ -36,6 +37,23 @@ export default function SettingsScreen() {
     updateSettings({ notificationsEnabled: v });
   }
 
+  async function onToggleAppLock(v: boolean) {
+    if (v) {
+      const can = await canUseAppLock();
+      if (!can) {
+        Alert.alert(
+          'Kilit kurulamadı',
+          'Telefonunuzda biyometri (parmak izi/yüz tanıma) veya ekran kilidi tanımlı değil. Önce telefon ayarlarından bir ekran kilidi kurun.',
+        );
+        return;
+      }
+      // Açmadan önce bir kez doğrula (kullanıcı kendini kilitlemesin).
+      const ok = await authenticate();
+      if (!ok) return;
+    }
+    updateSettings({ appLockEnabled: v });
+  }
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={{ padding: spacing.lg }}>
       <Section title="Bildirimler">
@@ -45,6 +63,17 @@ export default function SettingsScreen() {
             description="İlaç veya rapor bitmeden önce telefonunuza bildirim gelsin."
             value={s.notificationsEnabled}
             onValueChange={onToggleNotifications}
+          />
+        </Card>
+      </Section>
+
+      <Section title="Güvenlik">
+        <Card>
+          <SwitchField
+            label="Uygulama kilidi"
+            description="Açılışta ve uygulamaya her dönüşte biyometri (parmak izi/yüz) veya telefon kilidi sorulur. Hasta verileri telefona erişen başkalarından korunur."
+            value={s.appLockEnabled}
+            onValueChange={onToggleAppLock}
           />
         </Card>
       </Section>

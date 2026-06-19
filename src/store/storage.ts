@@ -7,10 +7,90 @@
 // için).
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
+import * as Crypto from 'expo-crypto';
+import CryptoJS from 'crypto-js';
 import { AppData, DEFAULT_SETTINGS, DoseEvent, Medication, Patient } from '../types';
 
 const STORAGE_KEY = 'ilac-takip:data:v1';
 const CORRUPT_KEY = 'ilac-takip:data:corrupt';
+
+// --- Cihazda şifreleme (at-rest) ---
+// Hassas sağlık verisi (hasta adı, tanı notları, ilaçlar) artık düz metin
+// AsyncStorage'da DEĞİL: AppData JSON'u AES-CBC ile şifrelenir; 256-bit anahtar
+// SecureStore'da (iOS Keychain / Android Keystore) tutulur, IV her yazımda
+// CSPRNG'den (expo-crypto) üretilir. Zarf biçimi:
+//   ENC1:<ivBase64>:<ciphertextBase64>
+// Eski (şifresiz) kayıtlar yüklemede saptanır ve otomatik olarak şifreliye
+// yükseltilir (veri kaybı olmadan). Çözme başarısızsa ok=false döner; üstteki
+// clobber-koruması sayesinde okunamayan veri ASLA boş veriyle ezilmez.
+const ENC_KEY_NAME = 'ilac-takip-enc-key-v1';
+const ENC_PREFIX = 'ENC1:';
+let cachedKey: CryptoJS.lib.WordArray | null = null;
+
+function bytesToHex(bytes: Uint8Array): string {
+  let s = '';
+  for (let i = 0; i < bytes.length; i++) {
+    s += bytes[i].toString(16).padStart(2, '0');
+  }
+  return s;
+}
+
+/** Şifreleme anahtarını getirir; yoksa üretip SecureStore'a yazar. */
+async function getEncKey(): Promise<CryptoJS.lib.WordArray> {
+  if (cachedKey) return cachedKey;
+  let hex: string | null = null;
+  try {
+    hex = await SecureStore.getItemAsync(ENC_KEY_NAME);
+  } catch {
+    hex = null;
+  }
+  if (!hex) {
+    const rand = await Crypto.getRandomBytesAsync(32); // 256-bit
+    hex = bytesToHex(rand);
+    await SecureStore.setItemAsync(ENC_KEY_NAME, hex);
+  }
+  cachedKey = CryptoJS.enc.Hex.parse(hex);
+  return cachedKey;
+}
+
+async function encryptString(plain: string): Promise<string> {
+  const key = await getEncKey();
+  const ivBytes = await Crypto.getRandomBytesAsync(16);
+  const iv = CryptoJS.enc.Hex.parse(bytesToHex(ivBytes));
+  const enc = CryptoJS.AES.encrypt(plain, key, { iv });
+  return (
+    ENC_PREFIX +
+    iv.toString(CryptoJS.enc.Base64) +
+    ':' +
+    enc.ciphertext.toString(CryptoJS.enc.Base64)
+  );
+}
+
+async function decryptString(envelope: string): Promise<string> {
+  const key = await getEncKey();
+  const body = envelope.slice(ENC_PREFIX.length);
+  const sep = body.indexOf(':');
+  if (sep < 0) throw new Error('bozuk şifre zarfı');
+  const iv = CryptoJS.enc.Base64.parse(body.slice(0, sep));
+  const ct = CryptoJS.enc.Base64.parse(body.slice(sep + 1));
+  const dec = CryptoJS.AES.decrypt(
+    CryptoJS.lib.CipherParams.create({ ciphertext: ct }),
+    key,
+    { iv },
+  );
+  const plain = dec.toString(CryptoJS.enc.Utf8);
+  if (!plain) throw new Error('çözme başarısız (anahtar uyuşmuyor?)');
+  return plain;
+}
+
+async function backupCorrupt(raw: string): Promise<void> {
+  try {
+    await AsyncStorage.setItem(CORRUPT_KEY, raw);
+  } catch {
+    /* yedekleme de başarısızsa elde olan bu */
+  }
+}
 
 export const emptyData: AppData = {
   patients: [],
@@ -116,24 +196,48 @@ export async function loadData(): Promise<LoadResult> {
 
   if (!raw) return { data: emptyData, ok: true }; // gerçekten boş (ilk açılış)
 
+  // Şifreli zarf: çöz, sonra ayrıştır. Çözme başarısızsa ASLA ezme (ok=false).
+  if (raw.startsWith(ENC_PREFIX)) {
+    let plain: string;
+    try {
+      plain = await decryptString(raw);
+    } catch (e) {
+      console.warn('Veri çözülemedi (anahtar erişilemedi/uyuşmadı):', e);
+      return { data: emptyData, ok: false };
+    }
+    try {
+      return { data: sanitize(JSON.parse(plain) as Partial<AppData>), ok: true };
+    } catch (e) {
+      console.warn('Çözülen veri bozuk, yedekleniyor:', e);
+      await backupCorrupt(raw);
+      return { data: emptyData, ok: false };
+    }
+  }
+
+  // Eski ŞİFRESİZ kayıt (migrasyon): oku ve otomatik olarak şifreliye yükselt.
   try {
     const parsed = JSON.parse(raw) as Partial<AppData>;
-    return { data: sanitize(parsed), ok: true };
+    const data = sanitize(parsed);
+    try {
+      const env = await encryptString(JSON.stringify(data));
+      await AsyncStorage.setItem(STORAGE_KEY, env);
+    } catch (e) {
+      // Yükseltme başarısızsa veri yine de okunabilir (düz metin) kalır.
+      console.warn('Şifreli yükseltme başarısız (veri korunuyor):', e);
+    }
+    return { data, ok: true };
   } catch (e) {
     // Bozuk JSON — ham veriyi yedekle, kurtarılabilir kalsın, ÜZERİNE YAZMA.
     console.warn('Veri bozuk, yedekleniyor:', e);
-    try {
-      await AsyncStorage.setItem(CORRUPT_KEY, raw);
-    } catch {
-      /* yedekleme de başarısızsa elde olan bu */
-    }
+    await backupCorrupt(raw);
     return { data: emptyData, ok: false };
   }
 }
 
 export async function saveData(data: AppData): Promise<void> {
   try {
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    const env = await encryptString(JSON.stringify(data));
+    await AsyncStorage.setItem(STORAGE_KEY, env);
   } catch (e) {
     console.warn('Veri kaydedilemedi:', e);
   }

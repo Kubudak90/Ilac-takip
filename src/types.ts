@@ -81,6 +81,8 @@ export interface Settings {
   notificationsEnabled: boolean;
   /** Günlük hatırlatma saati (0-23) */
   reminderHour: number;
+  /** Uygulama açılışında/öne gelince biyometri/cihaz kilidi istensin mi */
+  appLockEnabled: boolean;
 }
 
 export interface AppData {
@@ -100,4 +102,5 @@ export const DEFAULT_SETTINGS: Settings = {
   warnDaysBefore: 7,
   notificationsEnabled: true,
   reminderHour: 9,
+  appLockEnabled: false,
 };

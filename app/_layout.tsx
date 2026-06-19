@@ -3,6 +3,7 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { DataProvider } from '@/store/DataContext';
+import { LockGate } from '@/components/LockGate';
 import { requestNotificationPermission } from '@/utils/notifications';
 import { colors } from '@/theme';
 
@@ -16,6 +17,7 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <DataProvider>
         <StatusBar style="light" />
+        <LockGate>
         <Stack
           screenOptions={{
             headerStyle: { backgroundColor: colors.primary },
@@ -51,6 +53,7 @@ export default function RootLayout() {
           />
           <Stack.Screen name="uyum" options={{ title: 'Uyum Geçmişi' }} />
         </Stack>
+        </LockGate>
       </DataProvider>
     </SafeAreaProvider>
   );

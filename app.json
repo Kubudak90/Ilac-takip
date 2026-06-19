@@ -19,6 +19,7 @@
     },
     "android": {
       "package": "com.ilactakip.app",
+      "allowBackup": false,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0F766E"
@@ -47,6 +48,13 @@
         "expo-camera",
         {
           "cameraPermission": "İlaç kutusundaki karekodu okuyabilmek için kamera erişimi gerekir."
+        }
+      ],
+      "expo-secure-store",
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Uygulama kilidini açmak için Face ID kullanılır."
         }
       ]
     ],
