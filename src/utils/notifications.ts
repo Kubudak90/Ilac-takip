@@ -14,7 +14,7 @@
 import { AppState, Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import { Medication, Patient, Settings } from '../types';
-import { buildUrgencyList, currentRemainingUnits } from './status';
+import { buildUrgencyList } from './status';
 import { addDays, formatTR, startOfDay } from './date';
 
 Notifications.setNotificationHandler({
@@ -48,6 +48,19 @@ export async function requestNotificationPermission(): Promise<boolean> {
   }
 
   return granted;
+}
+
+/** Sistem bildirim izni şu an verilmiş mi? (UI'da "izin kapalı" uyarısı için.) */
+export async function getNotificationPermissionGranted(): Promise<boolean> {
+  try {
+    const s = await Notifications.getPermissionsAsync();
+    return (
+      s.granted ||
+      s.ios?.status === Notifications.IosAuthorizationStatus.PROVISIONAL
+    );
+  } catch {
+    return false;
+  }
 }
 
 async function ensureAndroidChannel(): Promise<void> {
@@ -101,6 +114,10 @@ async function doReschedule(
   }
 
   if (!settings.notificationsEnabled) return;
+  // Ayar "açık" olsa bile gerçek sistem izni yoksa planlama yapma; aksi halde
+  // her şey sessizce başarısız olur (kullanıcı "açık" sanır). UI bu durumu
+  // ayrıca bir uyarı bandıyla bildirir (bkz. notificationsGranted).
+  if (!(await getNotificationPermissionGranted())) return;
   await ensureAndroidChannel();
 
   const patientName = new Map(patients.map((p) => [p.id, p.fullName]));
@@ -112,9 +129,10 @@ async function doReschedule(
   const byTime = new Map<string, string[]>(); // "HH:MM" -> ["Ayşe — Coraspin", ...]
   for (const med of medications) {
     if (!med.doseTimes || med.doseTimes.length === 0) continue;
-    // Stok TAKİP EDİLİYOR ve tükendiyse hatırlatma kurma (boşuna "al" deme).
-    // stockUnits=0 ile eklenmiş (stok takip etmeyen) ilaçta hatırlatma sürer.
-    if (med.stockUnits > 0 && currentRemainingUnits(med) <= 0) continue;
+    // GÜVENLİK: Günlük "ilaç saati" hatırlatması, stok TAHMİNİNE göre
+    // SUSTURULMAZ. currentRemainingUnits yalnızca bir tahmindir (gerçek alım
+    // kaydı yok); ilaç hâlâ elde olabilir ve hasta dozu almalı. Stok bitişi
+    // ayrı bir uyarıyla bildirilir (aşağıdaki buildUrgencyList -> kind:'stock').
     const who = patientName.get(med.patientId) ?? 'Hasta';
     for (const time of med.doseTimes) {
       if (!/^\d{1,2}:\d{2}$/.test(time)) continue;

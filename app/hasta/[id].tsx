@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Alert, Share, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
@@ -7,8 +7,15 @@ import { Medication, Patient } from '@/types';
 import { colors, fontSize, spacing } from '@/theme';
 import { Button, Card, EmptyState, Loading } from '@/components/ui';
 import { MedicationCard } from '@/components/MedicationCard';
-import { mostUrgentForMedication, stockRunOutDate } from '@/utils/status';
-import { formatDose, formatTR, formatTRFromISO } from '@/utils/date';
+import { DoseList } from '@/components/DoseList';
+import { currentRemainingUnits, mostUrgentForMedication, stockRunOutDate } from '@/utils/status';
+import {
+  adherenceSummary,
+  indexLog,
+  lastNDayKeys,
+  scheduledDosesForDate,
+} from '@/utils/adherence';
+import { formatDose, formatTR, formatTRFromISO, todayKey } from '@/utils/date';
 
 /** Doktor/eczane ziyareti için paylaşılabilir ilaç listesi metni. */
 function buildPatientReport(
@@ -23,7 +30,7 @@ function buildPatientReport(
   if (meds.length === 0) lines.push('Kayıtlı ilaç yok.');
   meds.forEach((m, i) => {
     lines.push(`${i + 1}. ${m.name}`);
-    lines.push(`   Günde ${formatDose(m.dailyDose)} adet · Elde ${m.stockUnits} adet`);
+    lines.push(`   Günde ${formatDose(m.dailyDose)} adet · Tahmini kalan ~${Math.round(currentRemainingUnits(m))} adet`);
     const runOut = stockRunOutDate(m);
     if (runOut) lines.push(`   Tahmini bitiş: ${formatTR(runOut)}`);
     if (m.doseTimes && m.doseTimes.length)
@@ -40,9 +47,13 @@ function buildPatientReport(
 
 export default function PatientDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { data, loading, getPatient, medsForPatient, deletePatient } = useData();
+  const { data, loading, getPatient, medsForPatient, deletePatient, setDoseStatus } =
+    useData();
   const router = useRouter();
   const warnDays = data.settings.warnDaysBefore;
+  // En pahalı türetme: tüm doz günlüğünü Map'e indekslemek. Her render yerine
+  // yalnızca doseLog değişince yeniden hesapla (hook erken-return'lerden önce).
+  const logByKey = useMemo(() => indexLog(data.doseLog), [data.doseLog]);
 
   if (loading) return <Loading />;
   const patient = getPatient(id);
@@ -64,6 +75,12 @@ export default function PatientDetailScreen() {
   const age = patient.birthYear
     ? new Date().getFullYear() - patient.birthYear
     : undefined;
+
+  // Uyum: bugünün dozları + son 30 gün özeti (yalnız doz saati olan ilaçlar).
+  const todayK = todayKey();
+  const todayDoses = scheduledDosesForDate(meds, logByKey, todayK, todayK);
+  const summary30 = adherenceSummary(meds, logByKey, lastNDayKeys(30), todayK);
+  const hasSchedule = meds.some((m) => m.doseTimes && m.doseTimes.length > 0);
 
   async function onShare() {
     try {
@@ -127,6 +144,37 @@ export default function PatientDetailScreen() {
             />
           </View>
         </Card>
+
+        {hasSchedule ? (
+          <Card>
+            <View style={styles.uyumHeader}>
+              <Text style={styles.uyumTitle}>Uyum (son 30 gün)</Text>
+              <Text style={styles.uyumRate}>
+                {summary30.total > 0
+                  ? `%${Math.round(summary30.rate * 100)}`
+                  : '—'}
+              </Text>
+            </View>
+            <Text style={styles.uyumSub}>
+              {summary30.taken} alındı · {summary30.skipped} atlandı ·{' '}
+              {summary30.missed} kaçırıldı
+            </Text>
+            <Button
+              title="Uyum geçmişi"
+              icon="stats-chart-outline"
+              variant="secondary"
+              onPress={() => router.push(`/uyum?patientId=${id}`)}
+              style={{ marginTop: spacing.md }}
+            />
+          </Card>
+        ) : null}
+
+        {todayDoses.length > 0 ? (
+          <View style={styles.todayBlock}>
+            <Text style={styles.todayLabel}>Bugün — dozlar</Text>
+            <DoseList doses={todayDoses} dayKey={todayK} onSet={setDoseStatus} />
+          </View>
+        ) : null}
 
         <View style={styles.medHeader}>
           <Text style={styles.medTitle}>İlaçlar</Text>
@@ -196,6 +244,21 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
   },
   actions: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.lg },
+  uyumHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  uyumTitle: { fontSize: fontSize.lg, fontWeight: '800', color: colors.text },
+  uyumRate: { fontSize: fontSize.xxl, fontWeight: '900', color: colors.primary },
+  uyumSub: { fontSize: fontSize.sm, color: colors.textMuted, marginTop: 2 },
+  todayBlock: { marginTop: spacing.md, marginBottom: spacing.sm },
+  todayLabel: {
+    fontSize: fontSize.lg,
+    fontWeight: '800',
+    color: colors.text,
+    marginBottom: spacing.md,
+  },
   medHeader: {
     marginTop: spacing.xl,
     marginBottom: spacing.md,

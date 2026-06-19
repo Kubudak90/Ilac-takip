@@ -7,6 +7,7 @@ import { Medication } from '../types';
 import { colors, fontSize, spacing } from '../theme';
 import { Card, Pill, StatusBadge } from './ui';
 import {
+  currentRemainingUnits,
   daysUntilReportEnd,
   daysUntilStockOut,
   levelForDays,
@@ -44,7 +45,7 @@ export function MedicationCard({
 
       <View style={styles.metaRow}>
         <Pill text={`Günde ${formatDose(med.dailyDose)} adet`} />
-        <Pill text={`Stok: ${med.stockUnits} adet`} />
+        <Pill text={`Kalan ~${Math.round(currentRemainingUnits(med))} adet`} />
         {med.doseTimes && med.doseTimes.length > 0 ? (
           <Pill
             icon="time-outline"
@@ -54,6 +55,12 @@ export function MedicationCard({
           />
         ) : null}
       </View>
+
+      {!med.doseTimes || med.doseTimes.length === 0 ? (
+        <Text style={styles.noSchedule}>
+          Doz saati yok — stok elle güncellenir, alım takibi yapılmaz.
+        </Text>
+      ) : null}
 
       {/* Stok durumu */}
       <View style={styles.statusLine}>
@@ -133,6 +140,12 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   dateNote: { fontSize: fontSize.sm, color: colors.textMuted, fontWeight: '600' },
+  noSchedule: {
+    fontSize: fontSize.sm,
+    color: colors.textLight,
+    fontStyle: 'italic',
+    marginBottom: spacing.sm,
+  },
   noReport: { fontSize: fontSize.sm, color: colors.textLight, fontStyle: 'italic' },
   notesRow: {
     flexDirection: 'row',

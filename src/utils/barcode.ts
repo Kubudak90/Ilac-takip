@@ -28,14 +28,25 @@ function parseExpiry(yymmdd: string): Date | undefined {
   if (!/^\d{6}$/.test(yymmdd)) return undefined;
   const year = 2000 + parseInt(yymmdd.slice(0, 2), 10);
   const month = parseInt(yymmdd.slice(2, 4), 10); // 1-12
-  let day = parseInt(yymmdd.slice(4, 6), 10);
+  const day = parseInt(yymmdd.slice(4, 6), 10);
   if (month < 1 || month > 12) return undefined;
   if (day === 0) {
     // Ayın son günü
     return new Date(year, month, 0);
   }
   if (day > 31) return undefined;
-  return new Date(year, month - 1, day);
+  // Geçersiz gün/ay birleşimini (ör. 30 Şubat, 31 Kasım) reddet: JS Date
+  // taşan günü SESSİZCE ileri bir tarihe kaydırır (30 Şubat -> 2 Mart) ve bu,
+  // süresi geçmiş bir kutuyu "geçerli" gösterebilir. Tarihi geri-doğrula.
+  const d = new Date(year, month - 1, day);
+  if (
+    d.getFullYear() !== year ||
+    d.getMonth() !== month - 1 ||
+    d.getDate() !== day
+  ) {
+    return undefined;
+  }
+  return d;
 }
 
 /** EAN-13 / GTIN-13'ü 14 haneye (baş sıfır) normalize eder. */

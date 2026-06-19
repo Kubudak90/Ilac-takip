@@ -10,9 +10,16 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { AppData, Medication, Patient, Settings } from '../types';
+import { AppState } from 'react-native';
+import { AppData, DoseEvent, Medication, Patient, Settings } from '../types';
 import { emptyData, loadData, saveData } from './storage';
-import { onAppForeground, rescheduleAll } from '../utils/notifications';
+import {
+  getNotificationPermissionGranted,
+  onAppForeground,
+  rescheduleAll,
+} from '../utils/notifications';
+import { createdDayKey, doseKey, doseSizeFor } from '../utils/adherence';
+import { roundUnits } from '../utils/date';
 
 function genId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -21,6 +28,10 @@ function genId(): string {
 interface DataContextValue {
   data: AppData;
   loading: boolean;
+  /** Depo okunamadı/bozuktu — kurtarılabilir veriyi ezmemek için kayıt durduruldu. */
+  loadFailed: boolean;
+  /** Sistem bildirim izni verilmiş mi (ayar açık olsa bile false olabilir). */
+  notificationsGranted: boolean;
 
   // Hasta
   addPatient: (p: Omit<Patient, 'id' | 'createdAt'>) => string;
@@ -36,6 +47,18 @@ interface DataContextValue {
   medsForPatient: (patientId: string) => Medication[];
   /** Stok güncelle ve stokUpdatedAt'i bugüne çek (ilaç yazdırıldı/alındı). */
   refillMedication: (id: string, newStockUnits: number) => void;
+
+  // Doz / uyum
+  /**
+   * Bir dozu işaretle/geri al. status="taken" stoktan düşer (geri alınabilir),
+   * "skipped" sadece kaydeder. Aynı durum tekrar verilirse işaret kaldırılır.
+   */
+  setDoseStatus: (
+    medId: string,
+    dayKey: string,
+    time: string,
+    status: 'taken' | 'skipped',
+  ) => void;
 
   // Ayarlar
   updateSettings: (patch: Partial<Settings>) => void;
@@ -55,10 +78,17 @@ const DataContext = createContext<DataContextValue | undefined>(undefined);
 export function DataProvider({ children }: { children: React.ReactNode }) {
   const [data, setData] = useState<AppData>(emptyData);
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [notificationsGranted, setNotificationsGranted] = useState(true);
 
   // İlk yüklenen veri referansı: kaydetme efekti "veri gerçekten değişti mi?"
   // kararını bu referansla verir (bkz. aşağıdaki efekt).
   const loadedRef = useRef<AppData | null>(null);
+
+  // Depo okuması başarısızsa (ok=false) kaydetmeyi TAMAMEN engelleriz; aksi
+  // halde ilk düzenleme, geçici okunamamış/bozuk ama kurtarılabilir veriyi boş
+  // veriyle kalıcı olarak ezer (bkz. storage.ts LoadResult.ok sözleşmesi).
+  const loadOkRef = useRef(true);
 
   // İlk yükleme
   useEffect(() => {
@@ -67,7 +97,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       const loaded = await loadData();
       if (active) {
         loadedRef.current = loaded.data;
+        loadOkRef.current = loaded.ok;
         setData(loaded.data);
+        setLoadFailed(!loaded.ok);
         setLoading(false);
       }
     })();
@@ -92,6 +124,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   // kısa süre geciktirilir (debounce).
   useEffect(() => {
     if (loading) return;
+    // Depo okunamadı/bozuktu: kurtarılabilir veriyi ezmemek için ASLA yazma.
+    // Bildirimleri yine de bellekteki güncel veriye göre kur.
+    if (!loadOkRef.current) {
+      rescheduleAll(data.patients, data.medications, data.settings);
+      return;
+    }
     const changed = data !== loadedRef.current;
     if (!changed) {
       rescheduleAll(data.patients, data.medications, data.settings);
@@ -109,10 +147,39 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   // uyarılar atlanmaz, tükenen ilaçların hatırlatması durur.
   useEffect(() => {
     if (loading) return;
-    return onAppForeground(() => {
+    let active = true;
+    // Gerçek bildirim izni durumunu açılışta ve her öne gelişte tazele; ayar
+    // "açık" ama izin yoksa UI kullanıcıyı uyarabilsin (sessiz arıza önleme).
+    const refreshPermission = () => {
+      getNotificationPermissionGranted().then((g) => {
+        if (active) setNotificationsGranted(g);
+      });
+    };
+    refreshPermission();
+    const unsub = onAppForeground(() => {
       const d = dataRef.current;
       rescheduleAll(d.patients, d.medications, d.settings);
+      refreshPermission();
     });
+    return () => {
+      active = false;
+      unsub();
+    };
+  }, [loading]);
+
+  // Uygulama arka plana alınınca/kapanırken bekleyen değişikliği HEMEN yaz:
+  // 400ms debounce dolmadan kapatılırsa son doz işareti kaybolmasın.
+  useEffect(() => {
+    if (loading) return;
+    const sub = AppState.addEventListener('change', (state) => {
+      if (
+        (state === 'background' || state === 'inactive') &&
+        loadOkRef.current
+      ) {
+        saveData(dataRef.current);
+      }
+    });
+    return () => sub.remove();
   }, [loading]);
 
   // --- Hasta işlemleri ---
@@ -134,8 +201,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     setData((d) => ({
       ...d,
       patients: d.patients.filter((p) => p.id !== id),
-      // Hastanın ilaçlarını da sil
+      // Hastanın ilaçlarını ve doz kayıtlarını da sil
       medications: d.medications.filter((m) => m.patientId !== id),
+      doseLog: d.doseLog.filter((e) => e.patientId !== id),
     }));
   }, []);
 
@@ -166,6 +234,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     setData((d) => ({
       ...d,
       medications: d.medications.filter((m) => m.id !== id),
+      doseLog: d.doseLog.filter((e) => e.medId !== id),
     }));
   }, []);
 
@@ -184,6 +253,73 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }));
   }, []);
 
+  // --- Doz / uyum ---
+  const setDoseStatus = useCallback(
+    (
+      medId: string,
+      dayKey: string,
+      time: string,
+      status: 'taken' | 'skipped',
+    ) => {
+      setData((d) => {
+        const med = d.medications.find((m) => m.id === medId);
+        if (!med) return d;
+        // İlaç oluşturulmadan önceki bir güne yazma: sahte geriye-dönük kayıt
+        // ve gerçek stok düşümünü engelle (UI bunu üretmez ama savunma katmanı).
+        if (dayKey < createdDayKey(med)) return d;
+        const key = doseKey(medId, dayKey, time);
+        const existing = d.doseLog.find((e) => e.id === key);
+
+        // Aynı durum tekrar işaretlendi -> geri al: kaydı sil, stoğu iade et.
+        if (existing && existing.status === status) {
+          const stock = roundUnits(med.stockUnits + existing.appliedUnits);
+          return {
+            ...d,
+            medications: d.medications.map((m) =>
+              m.id === medId ? { ...m, stockUnits: stock } : m,
+            ),
+            doseLog: d.doseLog.filter((e) => e.id !== key),
+          };
+        }
+
+        // Önceki "taken" tüketimini geri ver, sonra yeni durumu uygula.
+        const oldApplied =
+          existing && existing.status === 'taken' ? existing.appliedUnits : 0;
+        let stock = med.stockUnits + oldApplied;
+        let applied = 0;
+        if (status === 'taken') {
+          // Stok 0'ın altına inemez; gerçekten düşülen miktarı kaydet (geri-alma
+          // için), böylece iade tam olur.
+          applied = Math.min(doseSizeFor(med), Math.max(0, stock));
+          stock = stock - applied;
+        }
+        stock = roundUnits(Math.max(0, stock));
+
+        const event: DoseEvent = {
+          id: key,
+          medId,
+          patientId: med.patientId,
+          dayKey,
+          time,
+          status,
+          appliedUnits: roundUnits(applied),
+          loggedAt: new Date().toISOString(),
+        };
+        const doseLog = existing
+          ? d.doseLog.map((e) => (e.id === key ? event : e))
+          : [...d.doseLog, event];
+        return {
+          ...d,
+          medications: d.medications.map((m) =>
+            m.id === medId ? { ...m, stockUnits: stock } : m,
+          ),
+          doseLog,
+        };
+      });
+    },
+    [],
+  );
+
   // --- Ayarlar ---
   const updateSettings = useCallback((patch: Partial<Settings>) => {
     setData((d) => ({ ...d, settings: { ...d.settings, ...patch } }));
@@ -191,9 +327,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   // --- Geri yükleme ---
   const restoreData = useCallback((incoming: AppData) => {
+    // Kullanıcı bilinçli olarak üzerine yazıyor: kayıt kilidini aç, uyarıyı kaldır.
+    loadOkRef.current = true;
+    setLoadFailed(false);
     setData(() => ({
       patients: incoming.patients ?? [],
       medications: incoming.medications ?? [],
+      doseLog: incoming.doseLog ?? [],
       settings: { ...emptyData.settings, ...(incoming.settings ?? {}) },
       barcodeBook: incoming.barcodeBook ?? {},
     }));
@@ -231,6 +371,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     () => ({
       data,
       loading,
+      loadFailed,
+      notificationsGranted,
       addPatient,
       updatePatient,
       deletePatient,
@@ -241,6 +383,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       getMedication,
       medsForPatient,
       refillMedication,
+      setDoseStatus,
       updateSettings,
       restoreData,
       lookupBarcode,
@@ -249,6 +392,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     [
       data,
       loading,
+      loadFailed,
+      notificationsGranted,
       addPatient,
       updatePatient,
       deletePatient,
@@ -259,6 +404,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       getMedication,
       medsForPatient,
       refillMedication,
+      setDoseStatus,
       updateSettings,
       restoreData,
       lookupBarcode,

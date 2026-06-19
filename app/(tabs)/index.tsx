@@ -1,22 +1,37 @@
 import React, { useMemo } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useData } from '@/store/DataContext';
 import { buildUrgencyList, UrgencyItem } from '@/utils/status';
-import { formatTR, humanDays } from '@/utils/date';
+import { indexLog, scheduledDosesForDate } from '@/utils/adherence';
+import { formatTR, humanDays, todayKey } from '@/utils/date';
 import { colors, fontSize, spacing, statusBg, statusColor } from '@/theme';
 import { Card, EmptyState, Loading, StatusBadge } from '@/components/ui';
+import { DoseList } from '@/components/DoseList';
 
 export default function DashboardScreen() {
-  const { data, loading, getPatient } = useData();
+  const { data, loading, loadFailed, notificationsGranted, getPatient, setDoseStatus } =
+    useData();
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
   const items = useMemo(
     () => buildUrgencyList(data.medications, data.settings.warnDaysBefore),
     [data.medications, data.settings.warnDaysBefore],
+  );
+
+  // Bugün alınacak dozlar (yalnızca doz saati tanımlı ilaçlar).
+  const todayK = todayKey();
+  const todayDoses = useMemo(() => {
+    const logByKey = indexLog(data.doseLog);
+    return scheduledDosesForDate(data.medications, logByKey, todayK, todayK);
+  }, [data.medications, data.doseLog, todayK]);
+  const takenToday = todayDoses.filter((d) => d.status === 'taken').length;
+  const patientsById = useMemo(
+    () => new Map(data.patients.map((p) => [p.id, p.fullName])),
+    [data.patients],
   );
 
   const counts = useMemo(() => {
@@ -33,6 +48,20 @@ export default function DashboardScreen() {
   const hiddenCount = okItems.length - upcoming.length;
 
   if (loading) return <Loading />;
+
+  // Depo okunamadı/bozuktu: kurtarılabilir veriyi ezmemek için kayıt durduruldu.
+  // Yanıltıcı "hasta yok" boş durumu yerine net bir uyarı göster.
+  if (loadFailed) {
+    return (
+      <View style={styles.center}>
+        <EmptyState
+          icon="warning-outline"
+          title="Verilere şu an erişilemedi"
+          subtitle="Kayıtlarınız okunamadı. Yanlışlıkla üzerine yazmamak için kayıt geçici olarak durduruldu. Lütfen uygulamayı kapatıp yeniden açın. Sorun sürerse Ayarlar → Yedekle / Geri Yükle ile son yedeğinizden geri yükleyin."
+        />
+      </View>
+    );
+  }
 
   if (data.patients.length === 0) {
     return (
@@ -51,6 +80,39 @@ export default function DashboardScreen() {
       style={styles.container}
       contentContainerStyle={{ padding: spacing.lg, paddingBottom: insets.bottom + spacing.xl }}
     >
+      {/* Bildirim izni ayar "açık" ama sistemde kapalıysa: sessiz arıza uyarısı */}
+      {data.settings.notificationsEnabled && !notificationsGranted ? (
+        <Pressable
+          onPress={() => Linking.openSettings()}
+          style={styles.permBanner}
+          accessibilityRole="button"
+          accessibilityLabel="Bildirim izni kapalı. Hatırlatmalar gelmiyor. Açmak için telefon ayarlarını açın."
+        >
+          <Ionicons name="notifications-off-outline" size={22} color={colors.danger} />
+          <Text style={styles.permBannerText}>
+            Bildirim izni kapalı — hatırlatmalar gelmiyor. Açmak için dokunun.
+          </Text>
+        </Pressable>
+      ) : null}
+
+      {/* Bugün alınacak dozlar — günlük asıl eylem */}
+      {todayDoses.length > 0 ? (
+        <View style={styles.todaySection}>
+          <View style={styles.headingRow}>
+            <Ionicons name="time" size={20} color={colors.primary} />
+            <Text style={styles.heading}>
+              Bugün — dozlar ({takenToday}/{todayDoses.length})
+            </Text>
+          </View>
+          <DoseList
+            doses={todayDoses}
+            dayKey={todayK}
+            patientsById={patientsById}
+            onSet={setDoseStatus}
+          />
+        </View>
+      ) : null}
+
       {/* Özet sayaçlar */}
       <View style={styles.summaryRow}>
         <SummaryBox count={counts.danger} label="Acil" level="danger" />
@@ -186,6 +248,22 @@ function UrgencyRow({
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   center: { flex: 1, justifyContent: 'center', backgroundColor: colors.bg },
+  permBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.dangerBg,
+    borderRadius: 12,
+    padding: spacing.md,
+    marginBottom: spacing.lg,
+  },
+  permBannerText: {
+    flex: 1,
+    color: colors.danger,
+    fontWeight: '700',
+    fontSize: fontSize.sm,
+  },
+  todaySection: { marginBottom: spacing.xl },
   summaryRow: { flexDirection: 'row', gap: spacing.md, marginBottom: spacing.lg },
   summaryBox: {
     flex: 1,

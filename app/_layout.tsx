@@ -49,6 +49,7 @@ export default function RootLayout() {
             name="yedek"
             options={{ title: 'Yedekle / Geri Yükle', presentation: 'modal' }}
           />
+          <Stack.Screen name="uyum" options={{ title: 'Uyum Geçmişi' }} />
         </Stack>
       </DataProvider>
     </SafeAreaProvider>

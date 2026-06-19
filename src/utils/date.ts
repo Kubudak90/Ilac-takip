@@ -30,6 +30,33 @@ export function parseISO(iso: string): Date {
   return new Date(iso);
 }
 
+/**
+ * Bir tarihi YEREL gün anahtarına çevirir: "YYYY-MM-DD". Doz günlüğü anahtarları
+ * için kullanılır; toISOString'in UTC kayması olmadan yerel günü temsil eder.
+ */
+export function toDayKey(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+/** Bugünün yerel gün anahtarı ("YYYY-MM-DD"). */
+export function todayKey(): string {
+  return toDayKey(new Date());
+}
+
+/** "YYYY-MM-DD" gün anahtarını yerel Date'e çevirir. */
+export function dayKeyToDate(key: string): Date {
+  const [y, m, d] = key.split('-').map((n) => parseInt(n, 10));
+  return new Date(y, (m || 1) - 1, d || 1);
+}
+
+/** Adet (doz) değerini kayan-nokta gürültüsünden arındırır (2 ondalık). */
+export function roundUnits(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
 export function toISODate(d: Date): string {
   return startOfDay(d).toISOString();
 }

@@ -47,6 +47,32 @@ export interface Medication {
   createdAt: string;
 }
 
+/**
+ * Bir doz-alım olayı (adherence/uyum kaydı).
+ *
+ * Doğal anahtar: `${medId}|${dayKey}|${time}` — bir ilacın belirli bir gündeki
+ * belirli saat-yuvası için tek kayıt. Bu sayede işaretleme idempotenttir ve
+ * çift kayıt oluşmaz.
+ *
+ * Stok artık GERÇEK sayımdır (tahmini azalma yok): "taken" olduğunda stoktan
+ * `appliedUnits` kadar düşülür; işaret geri alınınca aynı miktar iade edilir.
+ */
+export interface DoseEvent {
+  /** `${medId}|${dayKey}|${time}` */
+  id: string;
+  medId: string;
+  patientId: string;
+  /** Yerel gün, "YYYY-MM-DD" */
+  dayKey: string;
+  /** Planlı saat "HH:MM" */
+  time: string;
+  status: 'taken' | 'skipped';
+  /** Stoktan gerçekten düşülen miktar (skipped ise 0); geri-alma için. */
+  appliedUnits: number;
+  /** İşaretlenme zamanı (ISO). */
+  loggedAt: string;
+}
+
 /** Uygulama ayarları */
 export interface Settings {
   /** Kaç gün kala uyarı/bildirim verilsin */
@@ -60,6 +86,8 @@ export interface Settings {
 export interface AppData {
   patients: Patient[];
   medications: Medication[];
+  /** Doz-alım günlüğü (uyum geçmişi). */
+  doseLog: DoseEvent[];
   settings: Settings;
   /**
    * Barkod defteri: okutulan bir GTIN için en son kullanılan ilaç adı.

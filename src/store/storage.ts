@@ -7,7 +7,7 @@
 // için).
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { AppData, DEFAULT_SETTINGS, Medication, Patient } from '../types';
+import { AppData, DEFAULT_SETTINGS, DoseEvent, Medication, Patient } from '../types';
 
 const STORAGE_KEY = 'ilac-takip:data:v1';
 const CORRUPT_KEY = 'ilac-takip:data:corrupt';
@@ -15,6 +15,7 @@ const CORRUPT_KEY = 'ilac-takip:data:corrupt';
 export const emptyData: AppData = {
   patients: [],
   medications: [],
+  doseLog: [],
   settings: DEFAULT_SETTINGS,
   barcodeBook: {},
 };
@@ -67,9 +68,37 @@ function sanitize(parsed: Partial<AppData>): AppData {
       ? parsed.barcodeBook
       : {};
 
+  // Doz günlüğü: geçersiz kayıtları ve sahibi (ilacı) silinmiş olayları düşür.
+  const medById = new Map(medications.map((m) => [m.id, m]));
+  const doseLog: DoseEvent[] = Array.isArray(parsed.doseLog)
+    ? parsed.doseLog
+        .filter(
+          (e): e is DoseEvent =>
+            !!e &&
+            typeof e.id === 'string' &&
+            typeof e.medId === 'string' &&
+            typeof e.dayKey === 'string' &&
+            (e.status === 'taken' || e.status === 'skipped'),
+        )
+        .filter((e) => medById.has(e.medId))
+        .map((e) => ({
+          ...e,
+          // time string değilse id'den türet (id = medId|dayKey|time); '' ile
+          // saklamak anahtar-senkronunu bozardı.
+          time: typeof e.time === 'string' ? e.time : (e.id.split('|')[2] ?? ''),
+          // patientId'yi her zaman gerçek sahibe (ilaca) göre yeniden bağla;
+          // böylece deletePatient budaması güvenilir kalır.
+          patientId: medById.get(e.medId)!.patientId,
+          appliedUnits:
+            isFiniteNumber(e.appliedUnits) && e.appliedUnits >= 0 ? e.appliedUnits : 0,
+          loggedAt: typeof e.loggedAt === 'string' ? e.loggedAt : new Date().toISOString(),
+        }))
+    : [];
+
   return {
     patients,
     medications,
+    doseLog,
     settings: { ...DEFAULT_SETTINGS, ...(parsed.settings ?? {}) },
     barcodeBook,
   };
