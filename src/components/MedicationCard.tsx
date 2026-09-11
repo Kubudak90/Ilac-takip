@@ -64,13 +64,19 @@ export function MedicationCard({
 
       {/* Stok durumu */}
       <View style={styles.statusLine}>
-        <StatusBadge
-          level={stockLevel}
-          label={`İlaç: ${stockDays === null ? '—' : humanDays(stockDays)}`}
-        />
-        {stockDate ? (
-          <Text style={styles.dateNote}>{formatTR(stockDate)}</Text>
-        ) : null}
+        {med.trackStock ? (
+          <>
+            <StatusBadge
+              level={stockLevel}
+              label={`İlaç: ${stockDays === null ? '—' : humanDays(stockDays)}`}
+            />
+            {stockDate ? (
+              <Text style={styles.dateNote}>{formatTR(stockDate)}</Text>
+            ) : null}
+          </>
+        ) : (
+          <Text style={styles.noReport}>Stok takip edilmiyor (yalnız hatırlatma)</Text>
+        )}
       </View>
 
       {/* Rapor durumu */}

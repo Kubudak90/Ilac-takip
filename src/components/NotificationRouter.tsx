@@ -1,6 +1,6 @@
-// Bildirime dokununca ilgili hastaya götürür. Bitiş/rapor/son-kullanma
-// bildirimlerinde data.medicationId vardır -> o ilacın hastasına gidilir.
-// Doz/eskalasyon bildirimleri uygulamayı zaten ana ekrana açar (Bugün/Tükendi).
+// Bildirime dokununca ilgili ekrana götürür.
+// - Bitiş/rapor/son-kullanma: data.medicationId -> hasta detayı
+// - Doz / tükenme eskalasyonu: Özet sekmesi (Bugün / Tükendi)
 
 import { useEffect, useRef } from 'react';
 import * as Notifications from 'expo-notifications';
@@ -20,12 +20,16 @@ export function NotificationRouter() {
     handled.current = id;
 
     const data = response.notification.request.content.data as
-      | { medicationId?: string }
+      | { medicationId?: string; kind?: string }
       | undefined;
     const medId = data?.medicationId;
     if (medId) {
       const med = getMedication(medId);
       if (med) router.push(`/hasta/${med.patientId}`);
+      return;
+    }
+    if (data?.kind === 'dose' || data?.kind === 'depleted') {
+      router.push('/');
     }
   }, [response, loading, router, getMedication]);
 

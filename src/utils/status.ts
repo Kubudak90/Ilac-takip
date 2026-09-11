@@ -10,10 +10,13 @@ const MAX_DAYS_OF_SUPPLY = 3650;
 
 /**
  * Stok bitiş tarihini hesaplar.
- * kalan gün = floor(stockUnits / dailyDose), referans = stockUpdatedAt.
- * dailyDose <= 0 ise hesaplanamaz (null döner).
+ * kalan gün = floor(stockUnits / dailyDose), taban = bugün.
+ * Salt-hatırlatma ilaçlarında (trackStock değil) null döner — stok 0 olsa
+ * bile "bugün bitiyor" aciliyeti üretilmez.
+ * dailyDose <= 0 ise de null.
  */
 export function stockRunOutDate(med: Medication): Date | null {
+  if (!med.trackStock) return null;
   if (!med.dailyDose || med.dailyDose <= 0) return null;
   const raw = Math.floor(currentRemainingUnits(med) / med.dailyDose);
   const daysOfSupply = Math.min(Math.max(0, raw), MAX_DAYS_OF_SUPPLY);
@@ -96,9 +99,11 @@ export function itemsForMedication(
 ): UrgencyItem[] {
   const items: UrgencyItem[] = [];
 
+  // Tükenen (trackStock + stok 0) ilaçlar "Tükendi" panelinde / günlük
+  // eskalasyonda ele alınır; aciliyet listesine tekrar eklenmez.
   const stockOut = stockRunOutDate(med);
   const stockDays = daysUntilStockOut(med);
-  if (stockOut && stockDays !== null) {
+  if (stockOut && stockDays !== null && !isDepleted(med)) {
     items.push({
       medication: med,
       kind: 'stock',

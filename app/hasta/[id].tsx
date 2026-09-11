@@ -26,7 +26,7 @@ function buildPatientReport(
   const age = patient.birthYear
     ? `${new Date().getFullYear() - patient.birthYear} yaşında`
     : '';
-  const lines: string[] = [`💊 ${patient.fullName}${age ? ` (${age})` : ''} — İlaç Listesi`, ''];
+  const lines: string[] = [`${patient.fullName}${age ? ` (${age})` : ''} — İlaç Listesi`, ''];
   if (meds.length === 0) lines.push('Kayıtlı ilaç yok.');
   meds.forEach((m, i) => {
     lines.push(`${i + 1}. ${m.name}`);
@@ -83,14 +83,26 @@ export default function PatientDetailScreen() {
   const hasSchedule = meds.some((m) => m.doseTimes && m.doseTimes.length > 0);
 
   async function onShare() {
-    try {
-      await Share.share({
-        title: `${patient!.fullName} — İlaç Listesi`,
-        message: buildPatientReport(patient!, meds, warnDays),
-      });
-    } catch {
-      Alert.alert('Paylaşılamadı', 'Liste paylaşılırken bir sorun oluştu.');
-    }
+    Alert.alert(
+      'Listeyi paylaş',
+      'Bu liste hasta adı ve ilaç bilgilerini düz metin olarak paylaşır. Yalnızca güvendiğiniz kişi veya uygulamalarla paylaşın.',
+      [
+        { text: 'Vazgeç', style: 'cancel' },
+        {
+          text: 'Paylaş',
+          onPress: async () => {
+            try {
+              await Share.share({
+                title: `${patient!.fullName} — İlaç Listesi`,
+                message: buildPatientReport(patient!, meds, warnDays),
+              });
+            } catch {
+              Alert.alert('Paylaşılamadı', 'Liste paylaşılırken bir sorun oluştu.');
+            }
+          },
+        },
+      ],
+    );
   }
 
   function confirmDelete() {

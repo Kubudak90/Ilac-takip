@@ -134,14 +134,14 @@ export default function BackupScreen() {
       setBusy(false);
       Alert.alert(
         'Geri yükle',
-        `Bu yedekte ${incoming.patients.length} hasta ve ${incoming.medications.length} ilaç var. Mevcut tüm verilerin yerine bunlar yüklensin mi? Bu işlem geri alınamaz.`,
+        `Bu yedekte ${incoming.patients.length} hasta ve ${incoming.medications.length} ilaç var. Mevcut tüm verilerin yerine bunlar yüklensin mi? Geri yüklemeden önce otomatik bir anlık yedek alınır; hemen ardından “geri al” ile önceki verilere dönebilirsiniz.`,
         [
           { text: 'Vazgeç', style: 'cancel' },
           {
             text: 'Geri yükle',
             style: 'destructive',
-            onPress: () => {
-              restoreData(incoming);
+            onPress: async () => {
+              await restoreData(incoming);
               setImportText('');
               setImportPassword('');
               Alert.alert('Yüklendi', 'Veriler geri yüklendi.', [

@@ -222,6 +222,8 @@ async function doReschedule(
 
   // 2) İlaç/rapor/son-kullanma uyarıları — en yakın bitiş önce (öncelik).
   //    Her öğe için iki kademe: (a) eşik gün kala ön-uyarı, (b) bitiş günü.
+  //    Tükenen stok kalemleri buildUrgencyList'te zaten yok; yukarıdaki günlük
+  //    eskalasyon onları kapsar (çift planlama / bütçe israfı yok).
   const items = buildUrgencyList(medications, settings.warnDaysBefore);
 
   for (let ii = 0; ii < items.length; ii++) {
