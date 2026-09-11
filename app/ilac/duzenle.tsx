@@ -64,19 +64,14 @@ export default function EditMedicationScreen() {
   const [barcode] = useState<string | undefined>(existing?.barcode ?? params.barcode);
   const [notes, setNotes] = useState(existing?.notes ?? '');
 
-  // Canlı önizleme: kaydedilecek değere göre ilaç ne zaman biter?
-  // Stok değişmediyse referans tarih (stockUpdatedAt) korunur; aksi halde
-  // bugüne çekilir — kaydetme mantığıyla birebir aynı, böylece önizleme ile
-  // kart aynı tarihi gösterir.
+  // Canlı önizleme: status.stockRunOutDate ile aynı formül (bugünden ileri).
+  // Salt-hatırlatma (stok hiç girilmemiş / trackStock yok) için önizleme yok.
   const previewRunOut = useMemo(() => {
     if (!dailyDose || dailyDose <= 0 || stockUnits === undefined) return null;
-    const days = Math.floor((stockUnits ?? 0) / dailyDose);
-    const stockChanged = !existing || existing.stockUnits !== (stockUnits ?? 0);
-    const base =
-      stockChanged || !existing
-        ? today()
-        : startOfDay(parseISO(existing.stockUpdatedAt));
-    return addDays(base, days);
+    const willTrack = (stockUnits ?? 0) > 0 || !!existing?.trackStock;
+    if (!willTrack) return null;
+    const days = Math.floor(Math.max(0, stockUnits ?? 0) / dailyDose);
+    return addDays(today(), days);
   }, [dailyDose, stockUnits, existing]);
 
   function onSave() {

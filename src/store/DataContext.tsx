@@ -75,7 +75,7 @@ interface DataContextValue {
   updateSettings: (patch: Partial<Settings>) => void;
 
   /** Yedekten geri yükle: tüm veriyi içe aktarılan veriyle değiştirir. */
-  restoreData: (incoming: AppData) => void;
+  restoreData: (incoming: AppData) => Promise<void>;
   /** Son geri yükleme geri alınabilir mi (öncesinde anlık yedek var mı)? */
   canUndoRestore: boolean;
   /** Son geri yüklemeyi geri al: önceki veriye dön. Başarılıysa true. */
@@ -351,10 +351,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // --- Geri yükleme ---
-  const restoreData = useCallback((incoming: AppData) => {
+  const restoreData = useCallback(async (incoming: AppData) => {
     // Üzerine yazmadan ÖNCE mevcut veriyi şifreli anlık yedeğe al (geri-al).
-    void savePreRestoreSnapshot(dataRef.current);
-    setCanUndoRestore(true);
+    // Yalnızca yedek gerçekten kaydedildiyse "geri al" sun.
+    const snapOk = await savePreRestoreSnapshot(dataRef.current);
+    setCanUndoRestore(snapOk);
     // Kullanıcı bilinçli olarak üzerine yazıyor: kayıt kilidini aç, uyarıyı kaldır.
     loadOkRef.current = true;
     setLoadFailed(false);

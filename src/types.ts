@@ -14,9 +14,11 @@ export interface Patient {
 /**
  * Bir ilaç kaydı.
  *
- * Stok ne zaman biter hesabı:
+ * Stok ne zaman biter (yalnızca trackStock=true iken):
  *   kalan gün = floor(stockUnits / dailyDose)
- *   bitiş tarihi = stockUpdatedAt + kalan gün
+ *   bitiş tarihi = bugün + kalan gün
+ * Stok gerçek sayımdır; "Aldım" işaretlemesiyle düşer. Salt-hatırlatma
+ * ilaçlarında (trackStock yok) stok aciliyeti hesaplanmaz.
  *
  * Rapor ne zaman biter:
  *   reportEndDate alanı (varsa) takip edilir.

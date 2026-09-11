@@ -253,12 +253,14 @@ export async function saveData(data: AppData): Promise<void> {
 // --- Geri yükleme "geri al" anlık yedeği ---
 
 /** Geri yükleme öncesi mevcut veriyi şifreli olarak ayrı anahtara yedekler. */
-export async function savePreRestoreSnapshot(data: AppData): Promise<void> {
+export async function savePreRestoreSnapshot(data: AppData): Promise<boolean> {
   try {
     const env = await encryptString(JSON.stringify(data));
     await AsyncStorage.setItem(PRE_RESTORE_KEY, env);
+    return true;
   } catch (e) {
     console.warn('Geri-al yedeği alınamadı:', e);
+    return false;
   }
 }
 

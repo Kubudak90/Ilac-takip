@@ -31,7 +31,12 @@ describe('stok = gerçek sayım (tahmini azalma yok)', () => {
   });
 
   test('stockRunOutDate bugünden ileri projeksiyon', () => {
-    const m = med({ stockUnits: 10, dailyDose: 2, stockUpdatedAt: isoAgo(30) });
+    const m = med({
+      trackStock: true,
+      stockUnits: 10,
+      dailyDose: 2,
+      stockUpdatedAt: isoAgo(30),
+    });
     expect(daysBetween(today(), stockRunOutDate(m)!)).toBe(5);
     expect(daysUntilStockOut(m)).toBe(5);
   });
