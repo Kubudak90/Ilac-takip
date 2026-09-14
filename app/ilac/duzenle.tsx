@@ -39,6 +39,7 @@ export default function EditMedicationScreen() {
     updateMedication,
     deleteMedication,
     saveBarcodeName,
+    undoLastDelete,
   } = useData();
   const router = useRouter();
 
@@ -123,8 +124,19 @@ export default function EditMedicationScreen() {
         text: 'Sil',
         style: 'destructive',
         onPress: () => {
+          const name = existing.name;
           deleteMedication(existing.id);
-          router.back();
+          Alert.alert('Silindi', `${name} silindi.`, [
+            {
+              text: 'Geri al',
+              onPress: () => {
+                if (!undoLastDelete()) {
+                  Alert.alert('Yapılamadı', 'Silme geri alınamadı.');
+                }
+              },
+            },
+            { text: 'Tamam', onPress: () => router.back() },
+          ]);
         },
       },
     ]);

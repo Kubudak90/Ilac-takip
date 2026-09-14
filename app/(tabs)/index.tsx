@@ -12,8 +12,16 @@ import { Card, EmptyState, Loading, StatusBadge, Button } from '@/components/ui'
 import { DoseList } from '@/components/DoseList';
 
 export default function DashboardScreen() {
-  const { data, loading, loadFailed, notificationsGranted, notifDropped, getPatient, setDoseStatus } =
-    useData();
+  const {
+    data,
+    loading,
+    loadFailed,
+    saveFailed,
+    notificationsGranted,
+    notifDropped,
+    getPatient,
+    setDoseStatus,
+  } = useData();
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
@@ -108,6 +116,16 @@ export default function DashboardScreen() {
             Bildirim izni kapalı — hatırlatmalar gelmiyor. Açmak için dokunun.
           </Text>
         </Pressable>
+      ) : null}
+
+      {saveFailed ? (
+        <View style={styles.permBanner}>
+          <Ionicons name="save-outline" size={22} color={colors.danger} />
+          <Text style={styles.permBannerText}>
+            Son değişiklikler kaydedilemedi. Depo dolu olabilir; uygulamayı yeniden
+            açmayı deneyin veya yedek alın.
+          </Text>
+        </View>
       ) : null}
 
       {/* Cihaz/bütçe sınırı: bazı hatırlatmalar planlanamadı (sessiz düşürme yerine uyar) */}

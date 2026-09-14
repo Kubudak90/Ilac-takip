@@ -11,6 +11,7 @@ import {
   daysUntilReportEnd,
   daysUntilStockOut,
   levelForDays,
+  stockCountAgeDays,
   stockRunOutDate,
 } from '../utils/status';
 import { daysBetween, formatDose, formatTR, humanDays, parseISO, today } from '../utils/date';
@@ -29,6 +30,8 @@ export function MedicationCard({
   const stockDays = daysUntilStockOut(med);
   const stockDate = stockRunOutDate(med);
   const stockLevel = levelForDays(stockDays, warnDays);
+  const countAge = med.trackStock ? stockCountAgeDays(med) : 0;
+  const staleCount = med.trackStock && countAge >= 14;
 
   const reportDays = daysUntilReportEnd(med);
   const reportLevel = med.hasReport
@@ -59,6 +62,12 @@ export function MedicationCard({
       {!med.doseTimes || med.doseTimes.length === 0 ? (
         <Text style={styles.noSchedule}>
           Doz saati yok — stok elle güncellenir, alım takibi yapılmaz.
+        </Text>
+      ) : null}
+
+      {staleCount ? (
+        <Text style={styles.staleCount}>
+          Son sayım {countAge} gün önce — stoğu kontrol edip güncelleyin.
         </Text>
       ) : null}
 
@@ -150,6 +159,12 @@ const styles = StyleSheet.create({
     fontSize: fontSize.sm,
     color: colors.textLight,
     fontStyle: 'italic',
+    marginBottom: spacing.sm,
+  },
+  staleCount: {
+    fontSize: fontSize.sm,
+    color: colors.warning,
+    fontWeight: '700',
     marginBottom: spacing.sm,
   },
   noReport: { fontSize: fontSize.sm, color: colors.textLight, fontStyle: 'italic' },

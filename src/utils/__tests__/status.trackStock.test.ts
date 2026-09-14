@@ -3,6 +3,7 @@ import {
   buildUrgencyList,
   itemsForMedication,
   isDepleted,
+  stockCountAgeDays,
   stockRunOutDate,
   daysUntilStockOut,
 } from '../status';
@@ -19,6 +20,12 @@ const med = (o: Partial<Medication>): Medication => ({
   createdAt: new Date().toISOString(),
   ...o,
 });
+
+const isoAgo = (d: number) => {
+  const x = new Date();
+  x.setDate(x.getDate() - d);
+  return x.toISOString();
+};
 
 describe('salt-hatırlatma stok aciliyeti üretmez', () => {
   test('trackStock yok + stok 0 -> stockRunOutDate null', () => {
@@ -56,5 +63,14 @@ describe('tükenen ilaç urgency listesinde stock satırı yok', () => {
     const items = itemsForMedication(depleted, 7);
     expect(items.some((i) => i.kind === 'report')).toBe(true);
     expect(items.some((i) => i.kind === 'stock')).toBe(false);
+  });
+});
+
+describe('stockCountAgeDays (bayat sayım)', () => {
+  test('bugün güncellenmişse 0', () => {
+    expect(stockCountAgeDays(med({ stockUpdatedAt: today().toISOString() }))).toBe(0);
+  });
+  test('14 gün önce -> 14', () => {
+    expect(stockCountAgeDays(med({ stockUpdatedAt: isoAgo(14) }))).toBe(14);
   });
 });

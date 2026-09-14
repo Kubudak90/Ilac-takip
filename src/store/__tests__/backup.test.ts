@@ -11,11 +11,21 @@ jest.mock('expo-secure-store', () => ({
   deleteItemAsync: jest.fn(),
 }));
 jest.mock('expo-crypto', () => ({
-  getRandomBytesAsync: jest.fn(async (n: number) => new Uint8Array(n).fill(1)),
+  getRandomBytesAsync: jest.fn(async (n: number) => {
+    const a = new Uint8Array(n);
+    for (let i = 0; i < n; i++) a[i] = (i * 17 + 3) % 256;
+    return a;
+  }),
 }));
 
 import { DEFAULT_SETTINGS } from '../../types';
-import { parseBackup, serializeBackup, isEncryptedBackup } from '../storage';
+import {
+  parseBackup,
+  serializeBackup,
+  isEncryptedBackup,
+  encryptBackup,
+  decryptBackup,
+} from '../storage';
 
 const sample = {
   patients: [
@@ -87,5 +97,21 @@ describe('parseBackup / serializeBackup', () => {
   test('isEncryptedBackup düz JSON için false', () => {
     expect(isEncryptedBackup(serializeBackup(sample))).toBe(false);
     expect(isEncryptedBackup('not-json')).toBe(false);
+  });
+});
+
+describe('şifreli yedek (PRIV-4)', () => {
+  test('encrypt -> decrypt yuvarlak trip', async () => {
+    const plain = serializeBackup(sample);
+    const env = await encryptBackup(plain, 'gizli-parola');
+    expect(isEncryptedBackup(env)).toBe(true);
+    const back = decryptBackup(env, 'gizli-parola');
+    expect(back).toBe(plain);
+    expect(parseBackup(back).patients[0].fullName).toBe('Ayşe Yılmaz');
+  });
+
+  test('yanlış parola hata fırlatır', async () => {
+    const env = await encryptBackup(serializeBackup(sample), 'dogru');
+    expect(() => decryptBackup(env, 'yanlis')).toThrow(/Parola/);
   });
 });

@@ -47,7 +47,7 @@ function buildPatientReport(
 
 export default function PatientDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { data, loading, getPatient, medsForPatient, deletePatient, setDoseStatus } =
+  const { data, loading, getPatient, medsForPatient, deletePatient, setDoseStatus, undoLastDelete } =
     useData();
   const router = useRouter();
   const warnDays = data.settings.warnDaysBefore;
@@ -108,7 +108,7 @@ export default function PatientDetailScreen() {
   function confirmDelete() {
     Alert.alert(
       'Hastayı sil',
-      `${patient!.fullName} ve tüm ilaç kayıtları silinsin mi? Bu işlem geri alınamaz.`,
+      `${patient!.fullName} ve tüm ilaç kayıtları silinsin mi?`,
       [
         { text: 'Vazgeç', style: 'cancel' },
         {
@@ -116,7 +116,17 @@ export default function PatientDetailScreen() {
           style: 'destructive',
           onPress: () => {
             deletePatient(id);
-            router.back();
+            Alert.alert('Silindi', `${patient!.fullName} silindi.`, [
+              {
+                text: 'Geri al',
+                onPress: () => {
+                  if (!undoLastDelete()) {
+                    Alert.alert('Yapılamadı', 'Silme geri alınamadı.');
+                  }
+                },
+              },
+              { text: 'Tamam', onPress: () => router.back() },
+            ]);
           },
         },
       ],

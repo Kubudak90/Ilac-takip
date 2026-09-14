@@ -58,12 +58,13 @@ npm test
 
 ### Mağazaya çıkarmak (ileride)
 
-EAS projesi ve marka varlıkları henüz bağlanmamış; `eas.json` / `projectId`
-eklendikten sonra:
+`eas.json` iskeleti hazır. Expo hesabında proje oluşturup `app.json` içine
+`extra.eas.projectId` ekledikten sonra:
 
 ```bash
 npm install -g eas-cli
-eas build --platform android   # veya ios
+eas login
+eas build --platform android --profile preview
 ```
 
 ## Hesaplama mantığı
@@ -119,8 +120,8 @@ src/
 ## Bilinçli kapsam dışı (sonraki sürümler)
 
 - Hasta bazlı bildirim susturma / snooze
-- Silme geri alma (silmeler onayla korunur; yedek kalıcı kaybı önler)
-- EAS / mağaza varlıkları ve production bildirim izin doğrulaması
+- EAS `projectId` / mağaza hesap bağlama ve özel marka ikonları
+- Production Play/App Store gönderimi
 
 ## Teknolojiler
 

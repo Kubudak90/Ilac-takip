@@ -241,12 +241,15 @@ export async function loadData(): Promise<LoadResult> {
   }
 }
 
-export async function saveData(data: AppData): Promise<void> {
+/** Veriyi şifreli kaydeder. Başarılıysa true; UI kaydetme hatasını gösterebilir. */
+export async function saveData(data: AppData): Promise<boolean> {
   try {
     const env = await encryptString(JSON.stringify(data));
     await AsyncStorage.setItem(STORAGE_KEY, env);
+    return true;
   } catch (e) {
     console.warn('Veri kaydedilemedi:', e);
+    return false;
   }
 }
 
@@ -382,12 +385,16 @@ export function decryptBackup(text: string, password: string): string {
     iterations: typeof o.iter === 'number' ? o.iter : BACKUP_ITER,
     hasher: CryptoJS.algo.SHA256,
   });
-  const dec = CryptoJS.AES.decrypt(
-    CryptoJS.lib.CipherParams.create({ ciphertext: CryptoJS.enc.Base64.parse(o.ct) }),
-    key,
-    { iv: CryptoJS.enc.Hex.parse(o.iv) },
-  );
-  const plain = dec.toString(CryptoJS.enc.Utf8);
-  if (!plain) throw new Error('Parola yanlış olabilir.');
-  return plain;
+  try {
+    const dec = CryptoJS.AES.decrypt(
+      CryptoJS.lib.CipherParams.create({ ciphertext: CryptoJS.enc.Base64.parse(o.ct) }),
+      key,
+      { iv: CryptoJS.enc.Hex.parse(o.iv) },
+    );
+    const plain = dec.toString(CryptoJS.enc.Utf8);
+    if (!plain) throw new Error('Parola yanlış olabilir.');
+    return plain;
+  } catch {
+    throw new Error('Parola yanlış olabilir.');
+  }
 }
