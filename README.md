@@ -115,13 +115,16 @@ src/
 - Dosya yedek + opsiyonel parola + geri yükleme “geri al”
 - Bildirim derin link + cihaz bütçe uyarısı
 - Stok tükenince eskalasyon; salt-hatırlatmada yanlış “acil” yok
+- Hasta bazlı bildirim susturma; stok takibini kapatma
+- Bildirim planı birim testleri; kayıt hatasında “Tekrar dene”
 - Error Boundary; saf mantık birim testleri
 
 ## Bilinçli kapsam dışı (sonraki sürümler)
 
-- Hasta bazlı bildirim susturma / snooze
+- Hasta bazlı snooze süresi (kalıcı susturma var: Hasta düzenle → bildirimleri sustur)
 - EAS `projectId` / mağaza hesap bağlama ve özel marka ikonları
 - Production Play/App Store gönderimi
+- Web önizleme (`react-native-web` yok; yalnızca Expo Go iOS/Android)
 
 ## Teknolojiler
 

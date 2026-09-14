@@ -115,10 +115,15 @@ function isFiniteNumber(n: unknown): n is number {
 /** Yüklenen kaydı güvenli hale getirir: geçersiz alanları temizler/sınırlar. */
 function sanitize(parsed: Partial<AppData>): AppData {
   const patients: Patient[] = Array.isArray(parsed.patients)
-    ? parsed.patients.filter(
-        (p): p is Patient =>
-          !!p && typeof p.id === 'string' && typeof p.fullName === 'string',
-      )
+    ? parsed.patients
+        .filter(
+          (p): p is Patient =>
+            !!p && typeof p.id === 'string' && typeof p.fullName === 'string',
+        )
+        .map((p) => ({
+          ...p,
+          muteNotifications: !!p.muteNotifications,
+        }))
     : [];
   const patientIds = new Set(patients.map((p) => p.id));
 

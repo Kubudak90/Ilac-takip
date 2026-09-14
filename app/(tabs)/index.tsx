@@ -17,6 +17,7 @@ export default function DashboardScreen() {
     loading,
     loadFailed,
     saveFailed,
+    retrySave,
     notificationsGranted,
     notifDropped,
     getPatient,
@@ -119,13 +120,24 @@ export default function DashboardScreen() {
       ) : null}
 
       {saveFailed ? (
-        <View style={styles.permBanner}>
+        <Pressable
+          onPress={() => {
+            void retrySave().then((ok) => {
+              if (!ok) {
+                /* banner kalır */
+              }
+            });
+          }}
+          style={styles.permBanner}
+          accessibilityRole="button"
+          accessibilityLabel="Kayıt başarısız. Tekrar denemek için dokunun."
+        >
           <Ionicons name="save-outline" size={22} color={colors.danger} />
           <Text style={styles.permBannerText}>
-            Son değişiklikler kaydedilemedi. Depo dolu olabilir; uygulamayı yeniden
-            açmayı deneyin veya yedek alın.
+            Son değişiklikler kaydedilemedi. Tekrar denemek için dokunun veya
+            yedek alın.
           </Text>
-        </View>
+        </Pressable>
       ) : null}
 
       {/* Cihaz/bütçe sınırı: bazı hatırlatmalar planlanamadı (sessiz düşürme yerine uyar) */}

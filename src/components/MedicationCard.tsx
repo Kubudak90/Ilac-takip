@@ -48,7 +48,11 @@ export function MedicationCard({
 
       <View style={styles.metaRow}>
         <Pill text={`Günde ${formatDose(med.dailyDose)} adet`} />
-        <Pill text={`Kalan ~${Math.round(currentRemainingUnits(med))} adet`} />
+        {med.trackStock ? (
+          <Pill text={`Kalan ~${Math.round(currentRemainingUnits(med))} adet`} />
+        ) : (
+          <Pill text="Salt hatırlatma" color={colors.textMuted} bg={colors.bg} />
+        )}
         {med.doseTimes && med.doseTimes.length > 0 ? (
           <Pill
             icon="time-outline"

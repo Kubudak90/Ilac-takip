@@ -30,9 +30,15 @@ function buildPatientReport(
   if (meds.length === 0) lines.push('Kayıtlı ilaç yok.');
   meds.forEach((m, i) => {
     lines.push(`${i + 1}. ${m.name}`);
-    lines.push(`   Günde ${formatDose(m.dailyDose)} adet · Tahmini kalan ~${Math.round(currentRemainingUnits(m))} adet`);
-    const runOut = stockRunOutDate(m);
-    if (runOut) lines.push(`   Tahmini bitiş: ${formatTR(runOut)}`);
+    if (m.trackStock) {
+      lines.push(
+        `   Günde ${formatDose(m.dailyDose)} adet · Tahmini kalan ~${Math.round(currentRemainingUnits(m))} adet`,
+      );
+      const runOut = stockRunOutDate(m);
+      if (runOut) lines.push(`   Tahmini bitiş: ${formatTR(runOut)}`);
+    } else {
+      lines.push(`   Günde ${formatDose(m.dailyDose)} adet · Stok takip edilmiyor (yalnız hatırlatma)`);
+    }
     if (m.doseTimes && m.doseTimes.length)
       lines.push(`   Saatler: ${m.doseTimes.join(', ')}`);
     if (m.hasReport && m.reportEndDate)

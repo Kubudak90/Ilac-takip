@@ -41,6 +41,8 @@ interface DataContextValue {
   loadFailed: boolean;
   /** Son kayıt yazımı başarısız oldu (depo dolu/erişilemez vb.). */
   saveFailed: boolean;
+  /** Son kaydı hemen yeniden dener; başarılıysa true. */
+  retrySave: () => Promise<boolean>;
   /** Sistem bildirim izni verilmiş mi (ayar açık olsa bile false olabilir). */
   notificationsGranted: boolean;
   /** Cihaz/bütçe sınırı nedeniyle planlanamayan hatırlatma sayısı (0 = sorun yok). */
@@ -496,12 +498,21 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     [data.medications],
   );
 
+  const retrySave = useCallback(async () => {
+    if (!loadOkRef.current) return false;
+    const ok = await saveData(dataRef.current);
+    setSaveFailed(!ok);
+    if (ok) loadedRef.current = dataRef.current;
+    return ok;
+  }, []);
+
   const value = useMemo<DataContextValue>(
     () => ({
       data,
       loading,
       loadFailed,
       saveFailed,
+      retrySave,
       notificationsGranted,
       notifDropped,
       addPatient,
@@ -530,6 +541,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       loading,
       loadFailed,
       saveFailed,
+      retrySave,
       notificationsGranted,
       notifDropped,
       addPatient,
