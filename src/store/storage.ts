@@ -115,10 +115,15 @@ function isFiniteNumber(n: unknown): n is number {
 /** Yüklenen kaydı güvenli hale getirir: geçersiz alanları temizler/sınırlar. */
 function sanitize(parsed: Partial<AppData>): AppData {
   const patients: Patient[] = Array.isArray(parsed.patients)
-    ? parsed.patients.filter(
-        (p): p is Patient =>
-          !!p && typeof p.id === 'string' && typeof p.fullName === 'string',
-      )
+    ? parsed.patients
+        .filter(
+          (p): p is Patient =>
+            !!p && typeof p.id === 'string' && typeof p.fullName === 'string',
+        )
+        .map((p) => ({
+          ...p,
+          muteNotifications: !!p.muteNotifications,
+        }))
     : [];
   const patientIds = new Set(patients.map((p) => p.id));
 
@@ -241,24 +246,29 @@ export async function loadData(): Promise<LoadResult> {
   }
 }
 
-export async function saveData(data: AppData): Promise<void> {
+/** Veriyi şifreli kaydeder. Başarılıysa true; UI kaydetme hatasını gösterebilir. */
+export async function saveData(data: AppData): Promise<boolean> {
   try {
     const env = await encryptString(JSON.stringify(data));
     await AsyncStorage.setItem(STORAGE_KEY, env);
+    return true;
   } catch (e) {
     console.warn('Veri kaydedilemedi:', e);
+    return false;
   }
 }
 
 // --- Geri yükleme "geri al" anlık yedeği ---
 
 /** Geri yükleme öncesi mevcut veriyi şifreli olarak ayrı anahtara yedekler. */
-export async function savePreRestoreSnapshot(data: AppData): Promise<void> {
+export async function savePreRestoreSnapshot(data: AppData): Promise<boolean> {
   try {
     const env = await encryptString(JSON.stringify(data));
     await AsyncStorage.setItem(PRE_RESTORE_KEY, env);
+    return true;
   } catch (e) {
     console.warn('Geri-al yedeği alınamadı:', e);
+    return false;
   }
 }
 
@@ -380,12 +390,16 @@ export function decryptBackup(text: string, password: string): string {
     iterations: typeof o.iter === 'number' ? o.iter : BACKUP_ITER,
     hasher: CryptoJS.algo.SHA256,
   });
-  const dec = CryptoJS.AES.decrypt(
-    CryptoJS.lib.CipherParams.create({ ciphertext: CryptoJS.enc.Base64.parse(o.ct) }),
-    key,
-    { iv: CryptoJS.enc.Hex.parse(o.iv) },
-  );
-  const plain = dec.toString(CryptoJS.enc.Utf8);
-  if (!plain) throw new Error('Parola yanlış olabilir.');
-  return plain;
+  try {
+    const dec = CryptoJS.AES.decrypt(
+      CryptoJS.lib.CipherParams.create({ ciphertext: CryptoJS.enc.Base64.parse(o.ct) }),
+      key,
+      { iv: CryptoJS.enc.Hex.parse(o.iv) },
+    );
+    const plain = dec.toString(CryptoJS.enc.Utf8);
+    if (!plain) throw new Error('Parola yanlış olabilir.');
+    return plain;
+  } catch {
+    throw new Error('Parola yanlış olabilir.');
+  }
 }

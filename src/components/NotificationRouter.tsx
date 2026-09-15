@@ -1,6 +1,6 @@
-// Bildirime dokununca ilgili hastaya götürür. Bitiş/rapor/son-kullanma
-// bildirimlerinde data.medicationId vardır -> o ilacın hastasına gidilir.
-// Doz/eskalasyon bildirimleri uygulamayı zaten ana ekrana açar (Bugün/Tükendi).
+// Bildirime dokununca ilgili ekrana götürür.
+// - Bitiş/rapor/son-kullanma: data.medicationId -> hasta detayı
+// - Doz / tükenme: data.patientId varsa hasta, yoksa Özet
 
 import { useEffect, useRef } from 'react';
 import * as Notifications from 'expo-notifications';
@@ -14,18 +14,36 @@ export function NotificationRouter() {
   const handled = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!response || loading) return; // veri yüklenmeden gezinme
+    if (!response || loading) return;
     const id = response.notification.request.identifier;
-    if (handled.current === id) return; // aynı yanıtı tekrar işleme
+    if (handled.current === id) return;
     handled.current = id;
 
     const data = response.notification.request.content.data as
-      | { medicationId?: string }
+      | { medicationId?: string; patientId?: string; kind?: string }
       | undefined;
+
+    const clear = () => {
+      void Notifications.clearLastNotificationResponseAsync?.();
+    };
+
     const medId = data?.medicationId;
     if (medId) {
       const med = getMedication(medId);
-      if (med) router.push(`/hasta/${med.patientId}`);
+      if (med) {
+        router.push(`/hasta/${med.patientId}`);
+        clear();
+        return;
+      }
+    }
+    if (data?.patientId) {
+      router.push(`/hasta/${data.patientId}`);
+      clear();
+      return;
+    }
+    if (data?.kind === 'dose' || data?.kind === 'depleted') {
+      router.push('/');
+      clear();
     }
   }, [response, loading, router, getMedication]);
 

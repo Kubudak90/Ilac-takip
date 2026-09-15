@@ -8,15 +8,22 @@ export interface Patient {
   birthYear?: number;
   /** Serbest not: tanılar, doktor, hastane vb. */
   notes?: string;
+  /**
+   * Bu hasta için tüm hatırlatmalar susturulsun mu?
+   * Açıkken doz/stok/rapor bildirimleri planlanmaz (diğer hastalar etkilenmez).
+   */
+  muteNotifications?: boolean;
   createdAt: string; // ISO tarih
 }
 
 /**
  * Bir ilaç kaydı.
  *
- * Stok ne zaman biter hesabı:
+ * Stok ne zaman biter (yalnızca trackStock=true iken):
  *   kalan gün = floor(stockUnits / dailyDose)
- *   bitiş tarihi = stockUpdatedAt + kalan gün
+ *   bitiş tarihi = bugün + kalan gün
+ * Stok gerçek sayımdır; "Aldım" işaretlemesiyle düşer. Salt-hatırlatma
+ * ilaçlarında (trackStock yok) stok aciliyeti hesaplanmaz.
  *
  * Rapor ne zaman biter:
  *   reportEndDate alanı (varsa) takip edilir.
@@ -33,9 +40,9 @@ export interface Medication {
   /** stockUnits değerinin girildiği/güncellendiği tarih (ISO) */
   stockUpdatedAt: string;
   /**
-   * Bu ilacın stoğu takip ediliyor mu? Stok bir kez girilince (>0) kalıcı olarak
-   * true olur ve sonradan 0'a düşse (tükense) bile true kalır — böylece "tükendi"
-   * ile "stok hiç girilmedi" ayırt edilir. Salt-hatırlatma ilaçlarında false.
+   * Bu ilacın stoğu takip ediliyor mu? Stok >0 girilince varsayılan true olur;
+   * kullanıcı düzenlemeden kapatabilir (yanlışlıkla açılan "tükendi" döngüsünü
+   * kesmek için). Salt-hatırlatma ilaçlarında false/undefined.
    */
   trackStock?: boolean;
   /** Raporlu ilaç mı? */

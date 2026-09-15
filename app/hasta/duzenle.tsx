@@ -4,7 +4,7 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useData } from '@/store/DataContext';
 import { colors, spacing } from '@/theme';
 import { Button } from '@/components/ui';
-import { NumberField, TextField } from '@/components/forms';
+import { NumberField, SwitchField, TextField } from '@/components/forms';
 
 export default function EditPatientScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
@@ -17,6 +17,9 @@ export default function EditPatientScreen() {
   const [fullName, setFullName] = useState(existing?.fullName ?? '');
   const [birthYear, setBirthYear] = useState<number | undefined>(existing?.birthYear);
   const [notes, setNotes] = useState(existing?.notes ?? '');
+  const [muteNotifications, setMuteNotifications] = useState(
+    !!existing?.muteNotifications,
+  );
 
   function onSave() {
     const name = fullName.trim();
@@ -28,10 +31,16 @@ export default function EditPatientScreen() {
     const validBirthYear =
       birthYear && birthYear > 1900 && birthYear <= currentYear ? birthYear : undefined;
 
+    const payload = {
+      fullName: name,
+      birthYear: validBirthYear,
+      notes: notes.trim(),
+      muteNotifications,
+    };
     if (isEdit && existing) {
-      updatePatient(existing.id, { fullName: name, birthYear: validBirthYear, notes: notes.trim() });
+      updatePatient(existing.id, payload);
     } else {
-      addPatient({ fullName: name, birthYear: validBirthYear, notes: notes.trim() });
+      addPatient(payload);
     }
     router.back();
   }
@@ -61,6 +70,12 @@ export default function EditPatientScreen() {
           onChangeText={setNotes}
           placeholder="Tanılar, doktor, hastane vb."
           multiline
+        />
+        <SwitchField
+          label="Bu hasta için bildirimleri sustur"
+          description="Açıkken bu hastanın doz/stok/rapor hatırlatmaları planlanmaz. Diğer hastalar etkilenmez."
+          value={muteNotifications}
+          onValueChange={setMuteNotifications}
         />
         <Button title={isEdit ? 'Kaydet' : 'Hastayı Ekle'} onPress={onSave} />
       </ScrollView>

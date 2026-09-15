@@ -39,6 +39,7 @@ export default function EditMedicationScreen() {
     updateMedication,
     deleteMedication,
     saveBarcodeName,
+    undoLastDelete,
   } = useData();
   const router = useRouter();
 
@@ -63,21 +64,19 @@ export default function EditMedicationScreen() {
 
   const [barcode] = useState<string | undefined>(existing?.barcode ?? params.barcode);
   const [notes, setNotes] = useState(existing?.notes ?? '');
+  // Stok takibi: stok>0 girilince varsayılan açılır; kullanıcı kapatabilir.
+  const [trackStock, setTrackStock] = useState(
+    !!existing?.trackStock || (existing?.stockUnits ?? 0) > 0,
+  );
 
-  // Canlı önizleme: kaydedilecek değere göre ilaç ne zaman biter?
-  // Stok değişmediyse referans tarih (stockUpdatedAt) korunur; aksi halde
-  // bugüne çekilir — kaydetme mantığıyla birebir aynı, böylece önizleme ile
-  // kart aynı tarihi gösterir.
+  // Canlı önizleme: status.stockRunOutDate ile aynı formül (bugünden ileri).
+  // Salt-hatırlatma / takip kapalı için önizleme yok.
   const previewRunOut = useMemo(() => {
     if (!dailyDose || dailyDose <= 0 || stockUnits === undefined) return null;
-    const days = Math.floor((stockUnits ?? 0) / dailyDose);
-    const stockChanged = !existing || existing.stockUnits !== (stockUnits ?? 0);
-    const base =
-      stockChanged || !existing
-        ? today()
-        : startOfDay(parseISO(existing.stockUpdatedAt));
-    return addDays(base, days);
-  }, [dailyDose, stockUnits, existing]);
+    if (!trackStock) return null;
+    const days = Math.floor(Math.max(0, stockUnits ?? 0) / dailyDose);
+    return addDays(today(), days);
+  }, [dailyDose, stockUnits, trackStock]);
 
   function onSave() {
     const trimmed = name.trim();
@@ -97,8 +96,8 @@ export default function EditMedicationScreen() {
       name: trimmed,
       dailyDose,
       stockUnits: stockUnits ?? 0,
-      // Stok bir kez girilince (>0) takip kalıcı olur; tükense bile true kalır.
-      trackStock: (stockUnits ?? 0) > 0 ? true : existing?.trackStock,
+      // Açık anahtar takip eder; kullanıcı kapatırsa "tükendi" döngüsü kesilir.
+      trackStock,
       stockUpdatedAt:
         stockChanged || !existing ? toISODate(today()) : existing.stockUpdatedAt,
       doseTimes: doseTimes.length ? doseTimes : undefined,
@@ -128,8 +127,19 @@ export default function EditMedicationScreen() {
         text: 'Sil',
         style: 'destructive',
         onPress: () => {
+          const name = existing.name;
           deleteMedication(existing.id);
-          router.back();
+          Alert.alert('Silindi', `${name} silindi.`, [
+            {
+              text: 'Geri al',
+              onPress: () => {
+                if (!undoLastDelete()) {
+                  Alert.alert('Yapılamadı', 'Silme geri alınamadı.');
+                }
+              },
+            },
+            { text: 'Tamam', onPress: () => router.back() },
+          ]);
         },
       },
     ]);
@@ -177,9 +187,20 @@ export default function EditMedicationScreen() {
         <NumberField
           label="Elde kalan toplam adet"
           value={stockUnits}
-          onChangeNumber={setStockUnits}
+          onChangeNumber={(n) => {
+            setStockUnits(n);
+            // Stok girilince takibi otomatik aç (kullanıcı sonra kapatabilir).
+            if ((n ?? 0) > 0) setTrackStock(true);
+          }}
           placeholder="örn. 28"
           suffix="adet"
+        />
+
+        <SwitchField
+          label="Stok takibi"
+          description="Kapalıysa yalnız saat hatırlatması yapılır; “tükendi” ve stok bitiş uyarısı üretilmez."
+          value={trackStock}
+          onValueChange={setTrackStock}
         />
 
         {/* Canlı önizleme */}
@@ -189,10 +210,16 @@ export default function EditMedicationScreen() {
             <Text style={styles.previewLabel}>Tahmini bitiş</Text>
           </View>
           <Text style={styles.previewValue}>
-            {previewRunOut ? formatTR(previewRunOut) : 'Hesaplanamadı'}
+            {previewRunOut
+              ? formatTR(previewRunOut)
+              : trackStock
+                ? 'Hesaplanamadı'
+                : 'Stok takibi kapalı'}
           </Text>
           <Text style={styles.previewHint}>
-            Elde kalan {stockUnits ?? 0} adet, günde {formatDose(dailyDose || 0)} adetle bu tarihte biter.
+            {trackStock
+              ? `Elde kalan ${stockUnits ?? 0} adet, günde ${formatDose(dailyDose || 0)} adetle bu tarihte biter.`
+              : 'Salt hatırlatma — stok bitiş tarihi hesaplanmaz.'}
           </Text>
         </View>
 

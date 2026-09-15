@@ -11,6 +11,7 @@ import {
   daysUntilReportEnd,
   daysUntilStockOut,
   levelForDays,
+  stockCountAgeDays,
   stockRunOutDate,
 } from '../utils/status';
 import { daysBetween, formatDose, formatTR, humanDays, parseISO, today } from '../utils/date';
@@ -29,6 +30,8 @@ export function MedicationCard({
   const stockDays = daysUntilStockOut(med);
   const stockDate = stockRunOutDate(med);
   const stockLevel = levelForDays(stockDays, warnDays);
+  const countAge = med.trackStock ? stockCountAgeDays(med) : 0;
+  const staleCount = med.trackStock && countAge >= 14;
 
   const reportDays = daysUntilReportEnd(med);
   const reportLevel = med.hasReport
@@ -45,7 +48,11 @@ export function MedicationCard({
 
       <View style={styles.metaRow}>
         <Pill text={`Günde ${formatDose(med.dailyDose)} adet`} />
-        <Pill text={`Kalan ~${Math.round(currentRemainingUnits(med))} adet`} />
+        {med.trackStock ? (
+          <Pill text={`Kalan ~${Math.round(currentRemainingUnits(med))} adet`} />
+        ) : (
+          <Pill text="Salt hatırlatma" color={colors.textMuted} bg={colors.bg} />
+        )}
         {med.doseTimes && med.doseTimes.length > 0 ? (
           <Pill
             icon="time-outline"
@@ -62,15 +69,27 @@ export function MedicationCard({
         </Text>
       ) : null}
 
+      {staleCount ? (
+        <Text style={styles.staleCount}>
+          Son sayım {countAge} gün önce — stoğu kontrol edip güncelleyin.
+        </Text>
+      ) : null}
+
       {/* Stok durumu */}
       <View style={styles.statusLine}>
-        <StatusBadge
-          level={stockLevel}
-          label={`İlaç: ${stockDays === null ? '—' : humanDays(stockDays)}`}
-        />
-        {stockDate ? (
-          <Text style={styles.dateNote}>{formatTR(stockDate)}</Text>
-        ) : null}
+        {med.trackStock ? (
+          <>
+            <StatusBadge
+              level={stockLevel}
+              label={`İlaç: ${stockDays === null ? '—' : humanDays(stockDays)}`}
+            />
+            {stockDate ? (
+              <Text style={styles.dateNote}>{formatTR(stockDate)}</Text>
+            ) : null}
+          </>
+        ) : (
+          <Text style={styles.noReport}>Stok takip edilmiyor (yalnız hatırlatma)</Text>
+        )}
       </View>
 
       {/* Rapor durumu */}
@@ -144,6 +163,12 @@ const styles = StyleSheet.create({
     fontSize: fontSize.sm,
     color: colors.textLight,
     fontStyle: 'italic',
+    marginBottom: spacing.sm,
+  },
+  staleCount: {
+    fontSize: fontSize.sm,
+    color: colors.warning,
+    fontWeight: '700',
     marginBottom: spacing.sm,
   },
   noReport: { fontSize: fontSize.sm, color: colors.textLight, fontStyle: 'italic' },

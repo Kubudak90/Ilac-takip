@@ -39,6 +39,10 @@ interface DataContextValue {
   loading: boolean;
   /** Depo okunamadı/bozuktu — kurtarılabilir veriyi ezmemek için kayıt durduruldu. */
   loadFailed: boolean;
+  /** Son kayıt yazımı başarısız oldu (depo dolu/erişilemez vb.). */
+  saveFailed: boolean;
+  /** Son kaydı hemen yeniden dener; başarılıysa true. */
+  retrySave: () => Promise<boolean>;
   /** Sistem bildirim izni verilmiş mi (ayar açık olsa bile false olabilir). */
   notificationsGranted: boolean;
   /** Cihaz/bütçe sınırı nedeniyle planlanamayan hatırlatma sayısı (0 = sorun yok). */
@@ -75,13 +79,18 @@ interface DataContextValue {
   updateSettings: (patch: Partial<Settings>) => void;
 
   /** Yedekten geri yükle: tüm veriyi içe aktarılan veriyle değiştirir. */
-  restoreData: (incoming: AppData) => void;
+  restoreData: (incoming: AppData) => Promise<void>;
   /** Son geri yükleme geri alınabilir mi (öncesinde anlık yedek var mı)? */
   canUndoRestore: boolean;
   /** Son geri yüklemeyi geri al: önceki veriye dön. Başarılıysa true. */
   undoRestore: () => Promise<boolean>;
   /** Tüm verileri kalıcı olarak siler (fabrika ayarına döner). */
   deleteAllData: () => Promise<void>;
+
+  /** Son silinen hasta/ilaç geri alınabilir mi (oturum içi)? */
+  canUndoDelete: boolean;
+  /** Son silmeyi geri al. Başarılıysa true. */
+  undoLastDelete: () => boolean;
 
   // Barkod defteri
   /** Okutulan GTIN için kayıtlı ilaç adı (varsa). */
@@ -92,13 +101,30 @@ interface DataContextValue {
 
 const DataContext = createContext<DataContextValue | undefined>(undefined);
 
+/** Oturum içi son silme — geri almak için (kalıcı depoda tutulmaz). */
+type LastDelete =
+  | {
+      kind: 'patient';
+      patient: Patient;
+      medications: Medication[];
+      doseLog: DoseEvent[];
+    }
+  | {
+      kind: 'medication';
+      medication: Medication;
+      doseLog: DoseEvent[];
+    };
+
 export function DataProvider({ children }: { children: React.ReactNode }) {
   const [data, setData] = useState<AppData>(emptyData);
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
+  const [saveFailed, setSaveFailed] = useState(false);
   const [notificationsGranted, setNotificationsGranted] = useState(true);
   const [canUndoRestore, setCanUndoRestore] = useState(false);
+  const [canUndoDelete, setCanUndoDelete] = useState(false);
   const [notifDropped, setNotifDropped] = useState(0);
+  const lastDeleteRef = useRef<LastDelete | null>(null);
 
   // İlk yüklenen veri referansı: kaydetme efekti "veri gerçekten değişti mi?"
   // kararını bu referansla verir (bkz. aşağıdaki efekt).
@@ -159,7 +185,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     const t = setTimeout(() => {
-      saveData(data);
+      void saveData(data).then((ok) => {
+        setSaveFailed(!ok);
+        if (ok) loadedRef.current = data;
+      });
       rescheduleAll(data.patients, data.medications, data.settings).then(setNotifDropped);
     }, 400);
     return () => clearTimeout(t);
@@ -199,7 +228,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         (state === 'background' || state === 'inactive') &&
         loadOkRef.current
       ) {
-        saveData(dataRef.current);
+        void saveData(dataRef.current).then((ok) => setSaveFailed(!ok));
       }
     });
     return () => sub.remove();
@@ -221,13 +250,24 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const deletePatient = useCallback((id: string) => {
-    setData((d) => ({
-      ...d,
-      patients: d.patients.filter((p) => p.id !== id),
-      // Hastanın ilaçlarını ve doz kayıtlarını da sil
-      medications: d.medications.filter((m) => m.patientId !== id),
-      doseLog: d.doseLog.filter((e) => e.patientId !== id),
-    }));
+    setData((d) => {
+      const patient = d.patients.find((p) => p.id === id);
+      if (patient) {
+        lastDeleteRef.current = {
+          kind: 'patient',
+          patient,
+          medications: d.medications.filter((m) => m.patientId === id),
+          doseLog: d.doseLog.filter((e) => e.patientId === id),
+        };
+        setCanUndoDelete(true);
+      }
+      return {
+        ...d,
+        patients: d.patients.filter((p) => p.id !== id),
+        medications: d.medications.filter((m) => m.patientId !== id),
+        doseLog: d.doseLog.filter((e) => e.patientId !== id),
+      };
+    });
   }, []);
 
   // --- İlaç işlemleri ---
@@ -254,11 +294,45 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   );
 
   const deleteMedication = useCallback((id: string) => {
-    setData((d) => ({
-      ...d,
-      medications: d.medications.filter((m) => m.id !== id),
-      doseLog: d.doseLog.filter((e) => e.medId !== id),
-    }));
+    setData((d) => {
+      const medication = d.medications.find((m) => m.id === id);
+      if (medication) {
+        lastDeleteRef.current = {
+          kind: 'medication',
+          medication,
+          doseLog: d.doseLog.filter((e) => e.medId === id),
+        };
+        setCanUndoDelete(true);
+      }
+      return {
+        ...d,
+        medications: d.medications.filter((m) => m.id !== id),
+        doseLog: d.doseLog.filter((e) => e.medId !== id),
+      };
+    });
+  }, []);
+
+  const undoLastDelete = useCallback(() => {
+    const snap = lastDeleteRef.current;
+    if (!snap) return false;
+    lastDeleteRef.current = null;
+    setCanUndoDelete(false);
+    setData((d) => {
+      if (snap.kind === 'patient') {
+        return {
+          ...d,
+          patients: [...d.patients, snap.patient],
+          medications: [...d.medications, ...snap.medications],
+          doseLog: [...d.doseLog, ...snap.doseLog],
+        };
+      }
+      return {
+        ...d,
+        medications: [...d.medications, snap.medication],
+        doseLog: [...d.doseLog, ...snap.doseLog],
+      };
+    });
+    return true;
   }, []);
 
   const refillMedication = useCallback((id: string, newStockUnits: number) => {
@@ -351,10 +425,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // --- Geri yükleme ---
-  const restoreData = useCallback((incoming: AppData) => {
+  const restoreData = useCallback(async (incoming: AppData) => {
     // Üzerine yazmadan ÖNCE mevcut veriyi şifreli anlık yedeğe al (geri-al).
-    void savePreRestoreSnapshot(dataRef.current);
-    setCanUndoRestore(true);
+    // Yalnızca yedek gerçekten kaydedildiyse "geri al" sun.
+    const snapOk = await savePreRestoreSnapshot(dataRef.current);
+    setCanUndoRestore(snapOk);
     // Kullanıcı bilinçli olarak üzerine yazıyor: kayıt kilidini aç, uyarıyı kaldır.
     loadOkRef.current = true;
     setLoadFailed(false);
@@ -386,7 +461,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     loadOkRef.current = true;
     loadedRef.current = emptyData;
     setLoadFailed(false);
+    setSaveFailed(false);
     setCanUndoRestore(false);
+    lastDeleteRef.current = null;
+    setCanUndoDelete(false);
     setData(emptyData);
     // Planlı tüm bildirimleri iptal et.
     rescheduleAll([], [], emptyData.settings).then(setNotifDropped);
@@ -420,11 +498,21 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     [data.medications],
   );
 
+  const retrySave = useCallback(async () => {
+    if (!loadOkRef.current) return false;
+    const ok = await saveData(dataRef.current);
+    setSaveFailed(!ok);
+    if (ok) loadedRef.current = dataRef.current;
+    return ok;
+  }, []);
+
   const value = useMemo<DataContextValue>(
     () => ({
       data,
       loading,
       loadFailed,
+      saveFailed,
+      retrySave,
       notificationsGranted,
       notifDropped,
       addPatient,
@@ -443,6 +531,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       canUndoRestore,
       undoRestore,
       deleteAllData,
+      canUndoDelete,
+      undoLastDelete,
       lookupBarcode,
       saveBarcodeName,
     }),
@@ -450,6 +540,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       data,
       loading,
       loadFailed,
+      saveFailed,
+      retrySave,
       notificationsGranted,
       notifDropped,
       addPatient,
@@ -468,6 +560,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       canUndoRestore,
       undoRestore,
       deleteAllData,
+      canUndoDelete,
+      undoLastDelete,
       lookupBarcode,
       saveBarcodeName,
     ],

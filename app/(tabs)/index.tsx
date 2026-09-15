@@ -8,12 +8,21 @@ import { buildUrgencyList, isDepleted, UrgencyItem } from '@/utils/status';
 import { indexLog, scheduledDosesForDate } from '@/utils/adherence';
 import { formatTR, humanDays, todayKey } from '@/utils/date';
 import { colors, fontSize, spacing, statusBg, statusColor } from '@/theme';
-import { Card, EmptyState, Loading, StatusBadge } from '@/components/ui';
+import { Card, EmptyState, Loading, StatusBadge, Button } from '@/components/ui';
 import { DoseList } from '@/components/DoseList';
 
 export default function DashboardScreen() {
-  const { data, loading, loadFailed, notificationsGranted, notifDropped, getPatient, setDoseStatus } =
-    useData();
+  const {
+    data,
+    loading,
+    loadFailed,
+    saveFailed,
+    retrySave,
+    notificationsGranted,
+    notifDropped,
+    getPatient,
+    setDoseStatus,
+  } = useData();
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
@@ -65,8 +74,15 @@ export default function DashboardScreen() {
         <EmptyState
           icon="warning-outline"
           title="Verilere şu an erişilemedi"
-          subtitle="Kayıtlarınız okunamadı. Yanlışlıkla üzerine yazmamak için kayıt geçici olarak durduruldu. Lütfen uygulamayı kapatıp yeniden açın. Sorun sürerse Ayarlar → Yedekle / Geri Yükle ile son yedeğinizden geri yükleyin."
+          subtitle="Kayıtlarınız okunamadı. Yanlışlıkla üzerine yazmamak için kayıt geçici olarak durduruldu. Lütfen uygulamayı kapatıp yeniden açın. Sorun sürerse son yedeğinizden geri yükleyin."
         />
+        <View style={{ paddingHorizontal: spacing.xl, marginTop: spacing.lg }}>
+          <Button
+            title="Yedekle / Geri Yükle"
+            icon="cloud-download-outline"
+            onPress={() => router.push('/yedek')}
+          />
+        </View>
       </View>
     );
   }
@@ -99,6 +115,27 @@ export default function DashboardScreen() {
           <Ionicons name="notifications-off-outline" size={22} color={colors.danger} />
           <Text style={styles.permBannerText}>
             Bildirim izni kapalı — hatırlatmalar gelmiyor. Açmak için dokunun.
+          </Text>
+        </Pressable>
+      ) : null}
+
+      {saveFailed ? (
+        <Pressable
+          onPress={() => {
+            void retrySave().then((ok) => {
+              if (!ok) {
+                /* banner kalır */
+              }
+            });
+          }}
+          style={styles.permBanner}
+          accessibilityRole="button"
+          accessibilityLabel="Kayıt başarısız. Tekrar denemek için dokunun."
+        >
+          <Ionicons name="save-outline" size={22} color={colors.danger} />
+          <Text style={styles.permBannerText}>
+            Son değişiklikler kaydedilemedi. Tekrar denemek için dokunun veya
+            yedek alın.
           </Text>
         </Pressable>
       ) : null}

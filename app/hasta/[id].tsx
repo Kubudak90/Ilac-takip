@@ -26,13 +26,19 @@ function buildPatientReport(
   const age = patient.birthYear
     ? `${new Date().getFullYear() - patient.birthYear} yaşında`
     : '';
-  const lines: string[] = [`💊 ${patient.fullName}${age ? ` (${age})` : ''} — İlaç Listesi`, ''];
+  const lines: string[] = [`${patient.fullName}${age ? ` (${age})` : ''} — İlaç Listesi`, ''];
   if (meds.length === 0) lines.push('Kayıtlı ilaç yok.');
   meds.forEach((m, i) => {
     lines.push(`${i + 1}. ${m.name}`);
-    lines.push(`   Günde ${formatDose(m.dailyDose)} adet · Tahmini kalan ~${Math.round(currentRemainingUnits(m))} adet`);
-    const runOut = stockRunOutDate(m);
-    if (runOut) lines.push(`   Tahmini bitiş: ${formatTR(runOut)}`);
+    if (m.trackStock) {
+      lines.push(
+        `   Günde ${formatDose(m.dailyDose)} adet · Tahmini kalan ~${Math.round(currentRemainingUnits(m))} adet`,
+      );
+      const runOut = stockRunOutDate(m);
+      if (runOut) lines.push(`   Tahmini bitiş: ${formatTR(runOut)}`);
+    } else {
+      lines.push(`   Günde ${formatDose(m.dailyDose)} adet · Stok takip edilmiyor (yalnız hatırlatma)`);
+    }
     if (m.doseTimes && m.doseTimes.length)
       lines.push(`   Saatler: ${m.doseTimes.join(', ')}`);
     if (m.hasReport && m.reportEndDate)
@@ -47,7 +53,7 @@ function buildPatientReport(
 
 export default function PatientDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { data, loading, getPatient, medsForPatient, deletePatient, setDoseStatus } =
+  const { data, loading, getPatient, medsForPatient, deletePatient, setDoseStatus, undoLastDelete } =
     useData();
   const router = useRouter();
   const warnDays = data.settings.warnDaysBefore;
@@ -83,20 +89,32 @@ export default function PatientDetailScreen() {
   const hasSchedule = meds.some((m) => m.doseTimes && m.doseTimes.length > 0);
 
   async function onShare() {
-    try {
-      await Share.share({
-        title: `${patient!.fullName} — İlaç Listesi`,
-        message: buildPatientReport(patient!, meds, warnDays),
-      });
-    } catch {
-      Alert.alert('Paylaşılamadı', 'Liste paylaşılırken bir sorun oluştu.');
-    }
+    Alert.alert(
+      'Listeyi paylaş',
+      'Bu liste hasta adı ve ilaç bilgilerini düz metin olarak paylaşır. Yalnızca güvendiğiniz kişi veya uygulamalarla paylaşın.',
+      [
+        { text: 'Vazgeç', style: 'cancel' },
+        {
+          text: 'Paylaş',
+          onPress: async () => {
+            try {
+              await Share.share({
+                title: `${patient!.fullName} — İlaç Listesi`,
+                message: buildPatientReport(patient!, meds, warnDays),
+              });
+            } catch {
+              Alert.alert('Paylaşılamadı', 'Liste paylaşılırken bir sorun oluştu.');
+            }
+          },
+        },
+      ],
+    );
   }
 
   function confirmDelete() {
     Alert.alert(
       'Hastayı sil',
-      `${patient!.fullName} ve tüm ilaç kayıtları silinsin mi? Bu işlem geri alınamaz.`,
+      `${patient!.fullName} ve tüm ilaç kayıtları silinsin mi?`,
       [
         { text: 'Vazgeç', style: 'cancel' },
         {
@@ -104,7 +122,17 @@ export default function PatientDetailScreen() {
           style: 'destructive',
           onPress: () => {
             deletePatient(id);
-            router.back();
+            Alert.alert('Silindi', `${patient!.fullName} silindi.`, [
+              {
+                text: 'Geri al',
+                onPress: () => {
+                  if (!undoLastDelete()) {
+                    Alert.alert('Yapılamadı', 'Silme geri alınamadı.');
+                  }
+                },
+              },
+              { text: 'Tamam', onPress: () => router.back() },
+            ]);
           },
         },
       ],
