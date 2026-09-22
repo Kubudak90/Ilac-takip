@@ -121,10 +121,9 @@ src/
 
 ## Bilinçli kapsam dışı (sonraki sürümler)
 
-- Hasta bazlı snooze süresi (kalıcı susturma var: Hasta düzenle → bildirimleri sustur)
-- EAS `projectId` / mağaza hesap bağlama ve özel marka ikonları
-- Production Play/App Store gönderimi
-- Web önizleme (`react-native-web` yok; yalnızca Expo Go iOS/Android)
+- Web önizleme sınırlı (bildirim/kamera native API’leri web’de yok; asıl hedef Expo Go iOS/Android)
+- EAS `projectId` / özel marka ikonları / mağaza gönderimi
+- Süreli snooze (kalıcı hasta susturma mevcut)
 
 ## Teknolojiler
 
