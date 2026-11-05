@@ -81,7 +81,27 @@ export default function SettingsScreen() {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={{ padding: spacing.lg }}>
+    <ScrollView
+      style={[styles.container, { backgroundColor: colors.bg }]}
+      contentContainerStyle={{ padding: spacing.lg }}
+    >
+      <Section title="Görünüm ve Erişilebilirlik">
+        <Card>
+          <SwitchField
+            label="Büyük yazı tipi (Yaşlı dostu)"
+            description="Yazı boyutlarını ve etiketleri daha kolay okunması için büyütür."
+            value={!!s.largeText}
+            onValueChange={(v) => updateSettings({ largeText: v })}
+          />
+          <SwitchField
+            label="Karanlık mod (Gece görünümü)"
+            description="Gece kullanımında göz yormayan koyu renk temasını etkinleştirir."
+            value={!!s.darkMode}
+            onValueChange={(v) => updateSettings({ darkMode: v })}
+          />
+        </Card>
+      </Section>
+
       <Section title="Bildirimler">
         <Card>
           <SwitchField
@@ -112,7 +132,12 @@ export default function SettingsScreen() {
 
       <Section title="Kaç gün önceden uyarılsın?">
         <Card>
-          <Text style={styles.help}>
+          <Text
+            style={[
+              styles.help,
+              { color: colors.textMuted, fontSize: fontSize.sm },
+            ]}
+          >
             Bitişe bu kadar gün kala “yakında” uyarısı ve bildirim alırsınız.
           </Text>
           <View style={styles.chips}>
@@ -130,7 +155,14 @@ export default function SettingsScreen() {
 
       <Section title="Günlük hatırlatma saati">
         <Card>
-          <Text style={styles.help}>Bildirimler bu saatte gönderilir.</Text>
+          <Text
+            style={[
+              styles.help,
+              { color: colors.textMuted, fontSize: fontSize.sm },
+            ]}
+          >
+            Bildirimler bu saatte gönderilir.
+          </Text>
           <View style={styles.chips}>
             {HOUR_OPTIONS.map((h) => (
               <Chip
@@ -146,7 +178,12 @@ export default function SettingsScreen() {
 
       <Section title="Yedekleme">
         <Card>
-          <Text style={styles.help}>
+          <Text
+            style={[
+              styles.help,
+              { color: colors.textMuted, fontSize: fontSize.sm },
+            ]}
+          >
             Veriler yalnızca bu telefonda saklanır. Telefon kaybolursa veriler de
             kaybolur. Düzenli olarak yedek alın.
           </Text>
@@ -194,8 +231,13 @@ export default function SettingsScreen() {
         />
       </Section>
 
-      <Text style={styles.footer}>
-        İlaç Takip · v1.0{'\n'}
+      <Text
+        style={[
+          styles.footer,
+          { color: colors.textLight, fontSize: fontSize.sm },
+        ]}
+      >
+        İlaç Takip · v1.1{'\n'}
         Veriler yalnızca bu telefonda saklanır.
       </Text>
     </ScrollView>
@@ -214,12 +256,25 @@ function Chip({
   return (
     <Pressable
       onPress={onPress}
-      style={[styles.chip, active ? styles.chipActive : styles.chipInactive]}
+      style={[
+        styles.chip,
+        active
+          ? { backgroundColor: colors.primary }
+          : { backgroundColor: colors.primaryLight },
+      ]}
       hitSlop={8}
       accessibilityRole="button"
       accessibilityState={{ selected: active }}
     >
-      <Text style={[styles.chipText, { color: active ? colors.white : colors.primaryDark }]}>
+      <Text
+        style={[
+          styles.chipText,
+          {
+            color: active ? colors.white : colors.primaryDark,
+            fontSize: fontSize.md,
+          },
+        ]}
+      >
         {label}
       </Text>
     </Pressable>
@@ -239,8 +294,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   chipText: { fontSize: fontSize.md, fontWeight: '700' },
-  chipActive: { backgroundColor: colors.primary },
-  chipInactive: { backgroundColor: colors.primaryLight },
   footer: {
     textAlign: 'center',
     color: colors.textLight,

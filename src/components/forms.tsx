@@ -36,7 +36,16 @@ export function TextField({
     <View style={styles.field}>
       <Label>{label}</Label>
       <TextInput
-        style={[styles.input, multiline && styles.inputMultiline]}
+        style={[
+          styles.input,
+          {
+            backgroundColor: colors.card,
+            borderColor: colors.border,
+            color: colors.text,
+            fontSize: fontSize.lg,
+          },
+          multiline && styles.inputMultiline,
+        ]}
         value={value}
         onChangeText={onChangeText}
         placeholder={placeholder}
@@ -69,7 +78,16 @@ export function NumberField({
       <Label>{label}</Label>
       <View style={styles.inputRow}>
         <TextInput
-          style={[styles.input, { flex: 1 }]}
+          style={[
+            styles.input,
+            {
+              flex: 1,
+              backgroundColor: colors.card,
+              borderColor: colors.border,
+              color: colors.text,
+              fontSize: fontSize.lg,
+            },
+          ]}
           value={value === undefined || Number.isNaN(value) ? '' : String(value)}
           onChangeText={(t) => {
             const cleaned = t.replace(/[^0-9]/g, '');
@@ -79,7 +97,16 @@ export function NumberField({
           placeholderTextColor={colors.textLight}
           keyboardType="numeric"
         />
-        {suffix ? <Text style={styles.suffix}>{suffix}</Text> : null}
+        {suffix ? (
+          <Text
+            style={[
+              styles.suffix,
+              { color: colors.textMuted, fontSize: fontSize.md },
+            ]}
+          >
+            {suffix}
+          </Text>
+        ) : null}
       </View>
     </View>
   );
@@ -110,7 +137,16 @@ export function DecimalField({
       <Label>{label}</Label>
       <View style={styles.inputRow}>
         <TextInput
-          style={[styles.input, { flex: 1 }]}
+          style={[
+            styles.input,
+            {
+              flex: 1,
+              backgroundColor: colors.card,
+              borderColor: colors.border,
+              color: colors.text,
+              fontSize: fontSize.lg,
+            },
+          ]}
           value={text}
           onChangeText={(t) => {
             // Sadece rakam ve tek bir ayraç; virgülü noktaya çevir
@@ -127,7 +163,16 @@ export function DecimalField({
           placeholderTextColor={colors.textLight}
           keyboardType="decimal-pad"
         />
-        {suffix ? <Text style={styles.suffix}>{suffix}</Text> : null}
+        {suffix ? (
+          <Text
+            style={[
+              styles.suffix,
+              { color: colors.textMuted, fontSize: fontSize.md },
+            ]}
+          >
+            {suffix}
+          </Text>
+        ) : null}
       </View>
     </View>
   );
@@ -156,11 +201,29 @@ export function DateField({
   return (
     <View style={styles.field}>
       <Label>{label}</Label>
-      <Pressable style={styles.input} onPress={open}>
-        <Text style={styles.dateText}>{formatTR(value)}</Text>
+      <Pressable
+        style={[
+          styles.input,
+          { backgroundColor: colors.card, borderColor: colors.border },
+        ]}
+        onPress={open}
+      >
+        <Text
+          style={[
+            styles.dateText,
+            { color: colors.text, fontSize: fontSize.lg },
+          ]}
+        >
+          {formatTR(value)}
+        </Text>
       </Pressable>
       {show && Platform.OS === 'ios' && (
-        <View style={styles.iosPicker}>
+        <View
+          style={[
+            styles.iosPicker,
+            { backgroundColor: colors.card, borderColor: colors.border },
+          ]}
+        >
           <DateTimePicker
             value={draft}
             mode="date"
@@ -169,7 +232,7 @@ export function DateField({
             onChange={(_e, selected) => selected && setDraft(selected)}
           />
           <Pressable
-            style={styles.pickerDone}
+            style={[styles.pickerDone, { backgroundColor: colors.primary }]}
             onPress={() => {
               onChange(draft);
               setShow(false);
@@ -229,20 +292,49 @@ export function TimeListField({
           <Pressable
             key={t}
             onPress={() => onChange(times.filter((x) => x !== t))}
-            style={styles.timeChip}
+            style={[styles.timeChip, { backgroundColor: colors.primaryLight }]}
           >
-            <Text style={styles.timeChipText}>{t}  ✕</Text>
+            <Text
+              style={[
+                styles.timeChipText,
+                { color: colors.primaryDark, fontSize: fontSize.md },
+              ]}
+            >
+              {t}  ✕
+            </Text>
           </Pressable>
         ))}
-        <Pressable onPress={open} style={styles.timeAdd}>
-          <Text style={styles.timeAddText}>+ saat</Text>
+        <Pressable
+          onPress={open}
+          style={[styles.timeAdd, { borderColor: colors.primary }]}
+        >
+          <Text
+            style={[
+              styles.timeAddText,
+              { color: colors.primary, fontSize: fontSize.md },
+            ]}
+          >
+            + saat
+          </Text>
         </Pressable>
       </View>
       {times.length === 0 ? (
-        <Text style={styles.timeHint}>Saat eklemezseniz günlük hatırlatma kurulmaz.</Text>
+        <Text
+          style={[
+            styles.timeHint,
+            { color: colors.textMuted, fontSize: fontSize.sm },
+          ]}
+        >
+          Saat eklemezseniz günlük hatırlatma kurulmaz.
+        </Text>
       ) : null}
       {show && Platform.OS === 'ios' && (
-        <View style={styles.iosPicker}>
+        <View
+          style={[
+            styles.iosPicker,
+            { backgroundColor: colors.card, borderColor: colors.border },
+          ]}
+        >
           <DateTimePicker
             value={draft}
             mode="time"
@@ -251,7 +343,7 @@ export function TimeListField({
             onChange={(_e, selected) => selected && setDraft(selected)}
           />
           <Pressable
-            style={styles.pickerDone}
+            style={[styles.pickerDone, { backgroundColor: colors.primary }]}
             onPress={() => {
               addTime(draft);
               setShow(false);
@@ -293,7 +385,14 @@ export function SwitchField({
       <View style={{ flex: 1, paddingRight: spacing.md }}>
         <Label style={{ marginBottom: description ? 4 : 0 }}>{label}</Label>
         {description ? (
-          <Text style={styles.switchDesc}>{description}</Text>
+          <Text
+            style={[
+              styles.switchDesc,
+              { color: colors.textMuted, fontSize: fontSize.sm },
+            ]}
+          >
+            {description}
+          </Text>
         ) : null}
       </View>
       <Switch

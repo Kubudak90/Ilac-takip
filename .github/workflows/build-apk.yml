@@ -1,0 +1,52 @@
+name: Android APK Derle
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Kodu indir
+        uses: actions/checkout@v4
+
+      - name: Node.js kur
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Java 17 kur
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Gradle önbelleği
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('package-lock.json', 'app.json') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Bağımlılıkları yükle
+        run: npm ci
+
+      - name: Android projesini oluştur (Expo Prebuild)
+        run: npx expo prebuild --platform android --no-install
+
+      - name: Release APK derle
+        working-directory: android
+        run: ./gradlew assembleRelease --no-daemon
+
+      - name: APK dosyasını yükle
+        uses: actions/upload-artifact@v4
+        with:
+          name: ilac-takip-android-apk
+          path: android/app/build/outputs/apk/release/app-release.apk
+          retention-days: 30

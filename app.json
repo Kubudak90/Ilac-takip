@@ -2,10 +2,10 @@
   "expo": {
     "name": "İlaç Takip",
     "slug": "ilac-takip",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "orientation": "portrait",
     "scheme": "ilactakip",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "icon": "./assets/icon.png",
     "splash": {

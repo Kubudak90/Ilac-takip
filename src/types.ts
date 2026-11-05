@@ -1,5 +1,11 @@
 // Uygulamanın veri modelleri
 
+/** İlaç kullanım sıklığı türü */
+export type ScheduleType = 'daily' | 'weekdays' | 'interval' | 'prn';
+
+/** İlacın yemekle ilişkisi (aç/tok/yemekle) */
+export type MealRelation = 'none' | 'before_meal' | 'after_meal' | 'with_meal';
+
 /** Bir hasta (65+ polifarmasi hastası, bakıcı tarafından takip edilir) */
 export interface Patient {
   id: string;
@@ -13,6 +19,11 @@ export interface Patient {
    * Açıkken doz/stok/rapor bildirimleri planlanmaz (diğer hastalar etkilenmez).
    */
   muteNotifications?: boolean;
+  /**
+   * Bu hasta için bildirimlerin geçici olarak ertelendiği bitiş zamanı (ISO).
+   * Bu zaman gelecekte olduğu sürece hastanın bildirimleri susturulur.
+   */
+  snoozeUntil?: string;
   createdAt: string; // ISO tarih
 }
 
@@ -20,10 +31,11 @@ export interface Patient {
  * Bir ilaç kaydı.
  *
  * Stok ne zaman biter (yalnızca trackStock=true iken):
- *   kalan gün = floor(stockUnits / dailyDose)
+ *   kalan gün = floor(stockUnits / effectiveDailyDose)
  *   bitiş tarihi = bugün + kalan gün
  * Stok gerçek sayımdır; "Aldım" işaretlemesiyle düşer. Salt-hatırlatma
- * ilaçlarında (trackStock yok) stok aciliyeti hesaplanmaz.
+ * ilaçlarında (trackStock yok) veya ihtiyaç halinde (prn) ilaçlarda stok bitiş
+ * tarihi hesaplanmaz.
  *
  * Rapor ne zaman biter:
  *   reportEndDate alanı (varsa) takip edilir.
@@ -33,7 +45,7 @@ export interface Medication {
   patientId: string;
   /** İlaç adı, ör. "Coraspin 100 mg" */
   name: string;
-  /** Günde toplam kaç adet/doz alınıyor (ör. günde 2 = 2) */
+  /** Kullanım gününde alınan toplam adet/doz (ör. günde 2 = 2) */
   dailyDose: number;
   /** Şu an elde kalan toplam adet (tablet/kapsül/doz) */
   stockUnits: number;
@@ -45,6 +57,22 @@ export interface Medication {
    * kesmek için). Salt-hatırlatma ilaçlarında false/undefined.
    */
   trackStock?: boolean;
+  /**
+   * Kullanım takvimi türü:
+   * - 'daily' (varsayılan): Her gün
+   * - 'weekdays': Haftanın seçili günleri (weekdays alanı)
+   * - 'interval': Belirli gün arayla / gün aşırı (intervalDays alanı)
+   * - 'prn': İhtiyaç halinde (lüzum halinde; sabit takvimi yoktur)
+   */
+  scheduleType?: ScheduleType;
+  /** Haftanın günleri (0=Pazar, 1=Pazartesi ... 6=Cumartesi); scheduleType='weekdays' için */
+  weekdays?: number[];
+  /** Kaç günde bir alındığı (ör. 2 = gün aşırı); scheduleType='interval' için */
+  intervalDays?: number;
+  /** Aralıklı kullanımda başlangıç referans tarihi (ISO); yoksa createdAt kullanılır */
+  intervalStartDate?: string;
+  /** Aç/tok karnına kullanım etiketi */
+  mealRelation?: MealRelation;
   /** Raporlu ilaç mı? */
   hasReport: boolean;
   /** Rapor bitiş tarihi (ISO, sadece hasReport=true ise anlamlı) */
@@ -55,7 +83,7 @@ export interface Medication {
   barcode?: string;
   /** Kutu son kullanma tarihi (ISO, karekoddan okunur) */
   expiryDate?: string;
-  /** Serbest not (ör. "aç karnına", "sabah") */
+  /** Serbest not (ör. "bol su ile", "sabah") */
   notes?: string;
   createdAt: string;
 }
@@ -77,7 +105,7 @@ export interface DoseEvent {
   patientId: string;
   /** Yerel gün, "YYYY-MM-DD" */
   dayKey: string;
-  /** Planlı saat "HH:MM" */
+  /** Planlı saat "HH:MM" (PRN kayıtlarda "PRN:HH:MM" veya "HH:MM") */
   time: string;
   status: 'taken' | 'skipped';
   /** Stoktan gerçekten düşülen miktar (skipped ise 0); geri-alma için. */
@@ -100,6 +128,10 @@ export interface Settings {
   hideSensitiveNotifications: boolean;
   /** İlk açılış gizlilik/KVKK aydınlatması kabul edildi mi */
   privacyAccepted: boolean;
+  /** Karanlık mod (gece görünümü) açık mı */
+  darkMode?: boolean;
+  /** Yaşlı dostu büyük yazı tipi modu açık mı */
+  largeText?: boolean;
 }
 
 export interface AppData {
@@ -122,4 +154,7 @@ export const DEFAULT_SETTINGS: Settings = {
   appLockEnabled: false,
   hideSensitiveNotifications: false,
   privacyAccepted: false,
+  darkMode: false,
+  largeText: false,
 };
+

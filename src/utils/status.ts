@@ -9,16 +9,43 @@ import { addDays, daysBetween, parseISO, roundUnits, today } from './date';
 const MAX_DAYS_OF_SUPPLY = 3650;
 
 /**
+ * Bir ilacın günlük ortalama tüketim miktarını hesaplar.
+ * - 'daily' (varsayılan): dailyDose
+ * - 'weekdays': dailyDose * (seçili gün sayısı / 7)
+ * - 'interval': dailyDose / intervalDays
+ * - 'prn' (ihtiyaç halinde): 0 (düzenli tüketim yok, otomatik bitiş tarihi hesaplanmaz)
+ */
+export function effectiveDailyDose(med: Medication): number {
+  if (!med.dailyDose || med.dailyDose <= 0) return 0;
+  const type = med.scheduleType ?? 'daily';
+  if (type === 'prn') return 0;
+  if (type === 'weekdays') {
+    const count =
+      med.weekdays && med.weekdays.length > 0 ? med.weekdays.length : 7;
+    return (med.dailyDose * count) / 7;
+  }
+  if (type === 'interval') {
+    const n =
+      med.intervalDays && med.intervalDays >= 2
+        ? Math.floor(med.intervalDays)
+        : 2;
+    return med.dailyDose / n;
+  }
+  return med.dailyDose;
+}
+
+/**
  * Stok bitiş tarihini hesaplar.
- * kalan gün = floor(stockUnits / dailyDose), taban = bugün.
- * Salt-hatırlatma ilaçlarında (trackStock değil) null döner — stok 0 olsa
- * bile "bugün bitiyor" aciliyeti üretilmez.
- * dailyDose <= 0 ise de null.
+ * kalan gün = floor(stockUnits / effectiveDailyDose), taban = bugün.
+ * Salt-hatırlatma ilaçlarında (trackStock değil) veya ihtiyaç halinde (prn)
+ * ilaçlarda null döner — stok 0 olsa bile "bugün bitiyor" aciliyeti üretilmez.
+ * effectiveDailyDose <= 0 ise de null.
  */
 export function stockRunOutDate(med: Medication): Date | null {
   if (!med.trackStock) return null;
-  if (!med.dailyDose || med.dailyDose <= 0) return null;
-  const raw = Math.floor(currentRemainingUnits(med) / med.dailyDose);
+  const eff = effectiveDailyDose(med);
+  if (eff <= 0) return null;
+  const raw = Math.floor(currentRemainingUnits(med) / eff);
   const daysOfSupply = Math.min(Math.max(0, raw), MAX_DAYS_OF_SUPPLY);
   // Gerçek sayımdan BUGÜNDEN ileriye projeksiyon. Stok artık güncel kabul
   // edilir (doz işaretleme ile düşürülür), bu yüzden taban stockUpdatedAt değil
@@ -30,6 +57,12 @@ export function stockRunOutDate(med: Medication): Date | null {
 export function daysUntilExpiry(med: Medication): number | null {
   if (!med.expiryDate) return null;
   return daysBetween(today(), parseISO(med.expiryDate));
+}
+
+/** İlaç kutusunun son kullanma tarihi geçmiş mi? */
+export function isExpired(med: Medication): boolean {
+  const d = daysUntilExpiry(med);
+  return d !== null && d < 0;
 }
 
 /** Bugünden stok bitişine kalan gün (negatif = bitti). */

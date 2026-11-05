@@ -2,8 +2,9 @@
 // notifications.ts bu çıktıyı cihaza yazar.
 
 import { Medication, Patient, Settings } from '../types';
-import { buildUrgencyList, isDepleted } from './status';
-import { addDays, formatTR, startOfDay } from './date';
+import { buildUrgencyList, isDepleted, isExpired } from './status';
+import { isMedicationActiveOnDay, mealRelationLabel } from './adherence';
+import { addDays, formatTR, parseISO, startOfDay, toDayKey } from './date';
 
 /** iOS bekleyen bildirim üst sınırı 64; güvenli pay. */
 export const SCHEDULE_BUDGET = 58;
@@ -30,26 +31,46 @@ export interface PlanResult {
 function labelFor(
   kind: 'stock' | 'report' | 'expiry',
   name: string,
-  due: boolean,
+  stage: 'early30' | 'pre' | 'due',
 ): string {
   if (kind === 'stock') {
-    return due ? `${name} ilacı bugün bitiyor` : `${name} ilacı bitmek üzere`;
+    return stage === 'due'
+      ? `${name} ilacı bugün bitiyor`
+      : `${name} ilacı bitmek üzere`;
   }
   if (kind === 'report') {
-    return due ? `${name} raporu bugün doluyor` : `${name} raporu bitmek üzere`;
+    return stage === 'due'
+      ? `${name} raporu bugün doluyor`
+      : `${name} raporu bitmek üzere`;
   }
-  return due
+  if (stage === 'early30') {
+    return `${name} kutusunun son kullanma tarihine 30 gün kaldı`;
+  }
+  return stage === 'due'
     ? `${name} kutusunun son kullanma tarihi bugün`
     : `${name} kutusunun son kullanma tarihi yaklaşıyor`;
 }
 
-/** Susturulmuş hastaların ilaçlarını çıkarır. */
+/** Hastanın bildirimleri şu an geçici olarak ertelenmiş (snooze) mi? */
+export function isPatientSnoozed(
+  patient: Patient,
+  now: Date = new Date(),
+): boolean {
+  if (!patient.snoozeUntil) return false;
+  const until = parseISO(patient.snoozeUntil);
+  return Number.isFinite(until.getTime()) && until.getTime() > now.getTime();
+}
+
+/** Susturulmuş veya geçici ertelenmiş hastaların ilaçlarını çıkarır. */
 export function medicationsForNotifications(
   patients: Patient[],
   medications: Medication[],
+  now: Date = new Date(),
 ): Medication[] {
   const muted = new Set(
-    patients.filter((p) => p.muteNotifications).map((p) => p.id),
+    patients
+      .filter((p) => p.muteNotifications || isPatientSnoozed(p, now))
+      .map((p) => p.id),
   );
   return medications.filter((m) => !muted.has(m.patientId));
 }
@@ -76,7 +97,7 @@ export function oneshotTrigger(
 }
 
 /**
- * Susturma + bütçe dikkate alınarak planlanacak bildirimleri üretir.
+ * Susturma + erteleme + bütçe dikkate alınarak planlanacak bildirimleri üretir.
  */
 export function planNotifications(
   patients: Patient[],
@@ -89,9 +110,10 @@ export function planNotifications(
     return { items: [], dropped: 0, nudgedKeys: [] };
   }
 
-  const activeMeds = medicationsForNotifications(patients, medications);
+  const activeMeds = medicationsForNotifications(patients, medications, now);
   const patientName = new Map(patients.map((p) => [p.id, p.fullName]));
   const hide = settings.hideSensitiveNotifications;
+  const currentDayKey = toDayKey(now);
 
   const items: PlanItem[] = [];
   const nudgedKeys: string[] = [];
@@ -99,16 +121,19 @@ export function planNotifications(
   let budget = SCHEDULE_BUDGET;
   let dropped = 0;
 
-  // 1) Günlük doz saatleri — saat diliminde birleştir.
+  // 1) Günlük doz saatleri — saat diliminde birleştir (o gün aktif olan ilaçlar).
   const byTime = new Map<string, { lines: string[]; patientIds: Set<string> }>();
   for (const med of activeMeds) {
     if (!med.doseTimes || med.doseTimes.length === 0) continue;
     if (isDepleted(med)) continue;
+    if (!isMedicationActiveOnDay(med, currentDayKey)) continue;
     const who = patientName.get(med.patientId) ?? 'Hasta';
+    const meal = mealRelationLabel(med.mealRelation);
+    const medLine = meal ? `${who} — ${med.name} (${meal})` : `${who} — ${med.name}`;
     for (const time of med.doseTimes) {
       if (!/^\d{1,2}:\d{2}$/.test(time)) continue;
       const slot = byTime.get(time) ?? { lines: [], patientIds: new Set() };
-      slot.lines.push(`${who} — ${med.name}`);
+      slot.lines.push(medLine);
       slot.patientIds.add(med.patientId);
       byTime.set(time, slot);
     }
@@ -171,7 +196,36 @@ export function planNotifications(
     }
   }
 
-  // 2) Stok/rapor/SKT — iki kademe.
+  // 1c) Son kullanma tarihi geçmiş ilaçlar — günlük uyarı.
+  const expired = activeMeds.filter((m) => isExpired(m));
+  if (expired.length > 0) {
+    if (budget <= 0) {
+      dropped += 1;
+    } else {
+      const solePatient =
+        new Set(expired.map((m) => m.patientId)).size === 1
+          ? expired[0].patientId
+          : undefined;
+      items.push({
+        key: 'expired:daily',
+        title: '⚠️ Son kullanma tarihi geçen ilaç(lar)',
+        body: hide
+          ? `${expired.length} ilacın son kullanma tarihi geçti — uygulamayı açın`
+          : expired
+              .map((m) => `${patientName.get(m.patientId) ?? 'Hasta'} — ${m.name}`)
+              .join('\n'),
+        data: {
+          kind: 'expiry',
+          ...(solePatient ? { patientId: solePatient } : {}),
+          ...(expired.length === 1 ? { medicationId: expired[0].id } : {}),
+        },
+        trigger: { type: 'daily', hour: settings.reminderHour, minute: 0 },
+      });
+      budget--;
+    }
+  }
+
+  // 2) Stok/rapor/SKT — yaklaşan tarih bildirimleri.
   const urgency = buildUrgencyList(activeMeds, settings.warnDaysBefore);
   let urgencyIdx = 0;
   for (; urgencyIdx < urgency.length; urgencyIdx++) {
@@ -183,8 +237,32 @@ export function planNotifications(
     const dayOf = new Date(startOfDay(item.date));
     dayOf.setHours(settings.reminderHour, 0, 0, 0);
 
-    const labelSoon = labelFor(item.kind, item.medication.name, false);
-    const labelDue = labelFor(item.kind, item.medication.name, true);
+    const stages: { stage: 'early30' | 'pre' | 'due'; when: Date; label: string }[] = [];
+
+    // Son kullanma tarihi için 30 gün önceden erken uyarı (warnDaysBefore < 30 ise)
+    if (item.kind === 'expiry' && settings.warnDaysBefore < 30) {
+      const early30 = new Date(addDays(startOfDay(item.date), -30));
+      early30.setHours(settings.reminderHour, 0, 0, 0);
+      stages.push({
+        stage: 'early30',
+        when: early30,
+        label: labelFor(item.kind, item.medication.name, 'early30'),
+      });
+    }
+
+    stages.push(
+      {
+        stage: 'pre',
+        when: preWarn,
+        label: labelFor(item.kind, item.medication.name, 'pre'),
+      },
+      {
+        stage: 'due',
+        when: dayOf,
+        label: labelFor(item.kind, item.medication.name, 'due'),
+      },
+    );
+
     const tail = `${who} — ${formatTR(item.date)}. Reçete/rapor için planlama yapın.`;
     const hidden = 'Bir hatırlatma var — ayrıntı için uygulamayı açın.';
     const baseData = {
@@ -193,10 +271,7 @@ export function planNotifications(
       kind: item.kind,
     };
 
-    for (const s of [
-      { stage: 'pre' as const, when: preWarn, label: labelSoon },
-      { stage: 'due' as const, when: dayOf, label: labelDue },
-    ]) {
+    for (const s of stages) {
       if (budget <= 0) break;
       const key = `${item.medication.id}:${item.kind}:${s.stage}`;
       const trig = oneshotTrigger(s.when, now, key, nudged);
@@ -221,3 +296,4 @@ export function planNotifications(
 
   return { items, dropped, nudgedKeys };
 }
+

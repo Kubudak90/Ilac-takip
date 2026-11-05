@@ -1,11 +1,12 @@
 import { DEFAULT_SETTINGS, Medication, Patient } from '../../types';
 import {
+  isPatientSnoozed,
   medicationsForNotifications,
   oneshotTrigger,
   planNotifications,
   SCHEDULE_BUDGET,
 } from '../notificationPlan';
-import { addDays, startOfDay, today } from '../date';
+import { addDays, startOfDay, toISODate, today } from '../date';
 
 const patient = (o: Partial<Patient> & Pick<Patient, 'id' | 'fullName'>): Patient => ({
   createdAt: new Date().toISOString(),
@@ -22,7 +23,7 @@ const med = (o: Partial<Medication> & Pick<Medication, 'id' | 'patientId' | 'nam
   ...o,
 });
 
-describe('medicationsForNotifications (susturma)', () => {
+describe('medicationsForNotifications (susturma ve geçici erteleme)', () => {
   test('susturulmuş hastanın ilaçları elenir', () => {
     const patients = [
       patient({ id: 'p1', fullName: 'A', muteNotifications: true }),
@@ -33,6 +34,28 @@ describe('medicationsForNotifications (susturma)', () => {
       med({ id: 'm2', patientId: 'p2', name: 'Y', doseTimes: ['08:00'] }),
     ];
     expect(medicationsForNotifications(patients, meds).map((m) => m.id)).toEqual(['m2']);
+  });
+
+  test('snoozeUntil gelecekte olan hastanın ilaçları elenir, geçmişte olan dahil edilir', () => {
+    const now = new Date('2026-05-10T10:00:00.000Z');
+    const snoozedP = patient({
+      id: 'p1',
+      fullName: 'A',
+      snoozeUntil: '2026-05-10T14:00:00.000Z',
+    });
+    const expiredSnoozeP = patient({
+      id: 'p2',
+      fullName: 'B',
+      snoozeUntil: '2026-05-10T08:00:00.000Z',
+    });
+    expect(isPatientSnoozed(snoozedP, now)).toBe(true);
+    expect(isPatientSnoozed(expiredSnoozeP, now)).toBe(false);
+
+    const meds = [
+      med({ id: 'm1', patientId: 'p1', name: 'X' }),
+      med({ id: 'm2', patientId: 'p2', name: 'Y' }),
+    ];
+    expect(medicationsForNotifications([snoozedP, expiredSnoozeP], meds, now).map((m) => m.id)).toEqual(['m2']);
   });
 });
 
@@ -56,14 +79,23 @@ describe('planNotifications', () => {
     expect(r.items.filter((i) => i.data.kind === 'dose')).toHaveLength(0);
   });
 
-  test('tek hastada doz bildirimine patientId eklenir', () => {
+  test('tek hastada doz bildirimine patientId ve aç/tok etiketi eklenir', () => {
     const r = planNotifications(
       [patient({ id: 'p1', fullName: 'Ayşe' })],
-      [med({ id: 'm1', patientId: 'p1', name: 'Coraspin', doseTimes: ['08:00'] })],
+      [
+        med({
+          id: 'm1',
+          patientId: 'p1',
+          name: 'Coraspin',
+          doseTimes: ['08:00'],
+          mealRelation: 'after_meal',
+        }),
+      ],
       DEFAULT_SETTINGS,
     );
     const dose = r.items.find((i) => i.data.kind === 'dose');
     expect(dose?.data.patientId).toBe('p1');
+    expect(dose?.body).toContain('Tok karnına');
   });
 
   test('tükenen ilaç için depleted planı, stok one-shot yok', () => {
@@ -84,6 +116,43 @@ describe('planNotifications', () => {
     expect(r.items.some((i) => i.data.kind === 'depleted')).toBe(true);
     expect(r.items.some((i) => i.data.kind === 'dose')).toBe(false);
     expect(r.items.some((i) => i.data.kind === 'stock')).toBe(false);
+  });
+
+  test('SKT geçmiş ilaç için günlük SKT geçti uyarısı (expired:daily) planlanır', () => {
+    const pastExpiry = toISODate(addDays(today(), -5));
+    const r = planNotifications(
+      [patient({ id: 'p1', fullName: 'Ayşe' })],
+      [
+        med({
+          id: 'm1',
+          patientId: 'p1',
+          name: 'Eskiİlaç',
+          expiryDate: pastExpiry,
+        }),
+      ],
+      DEFAULT_SETTINGS,
+    );
+    const expAlert = r.items.find((i) => i.key === 'expired:daily');
+    expect(expAlert).toBeDefined();
+    expect(expAlert?.body).toContain('Eskiİlaç');
+  });
+
+  test('SKT yaklaşan ilaç için 30 gün erken uyarı (early30) planlanır', () => {
+    const futureExpiry = toISODate(addDays(today(), 45));
+    const r = planNotifications(
+      [patient({ id: 'p1', fullName: 'Ayşe' })],
+      [
+        med({
+          id: 'm1',
+          patientId: 'p1',
+          name: 'Kutuİlaç',
+          expiryDate: futureExpiry,
+        }),
+      ],
+      { ...DEFAULT_SETTINGS, warnDaysBefore: 7 },
+    );
+    const early30 = r.items.find((i) => i.key === 'm1:expiry:early30');
+    expect(early30).toBeDefined();
   });
 
   test('bütçe aşımında dropped artar', () => {
@@ -138,3 +207,4 @@ describe('oneshotTrigger', () => {
     expect(t2).toBeNull();
   });
 });
+

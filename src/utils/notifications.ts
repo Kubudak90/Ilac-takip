@@ -164,6 +164,55 @@ export async function sendTestNotification(): Promise<void> {
 }
 
 /**
+ * Bir ilaç dozunu verilen dakika kadar erteleyip (snooze) tek seferlik yerel
+ * bildirim kurar. Başarılıysa true döner.
+ */
+export async function scheduleSnoozedDoseNotification({
+  medicationId,
+  medName,
+  patientId,
+  patientName,
+  minutes,
+  hideSensitive,
+}: {
+  medicationId: string;
+  medName: string;
+  patientId: string;
+  patientName?: string;
+  minutes: number;
+  hideSensitive?: boolean;
+}): Promise<boolean> {
+  try {
+    if (!(await getNotificationPermissionGranted())) return false;
+    await ensureAndroidChannel();
+    const secs = Math.max(60, Math.round(minutes * 60));
+    const who = patientName ? `${patientName} — ` : '';
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: '⏰ Ertelenen İlaç Saati',
+        body: hideSensitive
+          ? 'Ertelenen ilaç zamanı geldi — ayrıntı için uygulamayı açın.'
+          : `${who}${medName} ilacını alma zamanı geldi.`,
+        data: {
+          kind: 'dose',
+          medicationId,
+          patientId,
+          snoozed: true,
+        },
+      },
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+        seconds: secs,
+      },
+    });
+    return true;
+  } catch (e) {
+    console.warn('Erteleme bildirimi kurulamadı:', e);
+    return false;
+  }
+}
+
+/**
  * Uygulama öne geldiğinde verilen geri çağrıyı çalıştırır.
  * Aboneliği iptal eden fonksiyonu döndürür.
  */
@@ -173,3 +222,4 @@ export function onAppForeground(cb: () => void): () => void {
   });
   return () => sub.remove();
 }
+

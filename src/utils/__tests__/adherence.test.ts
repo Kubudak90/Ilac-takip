@@ -5,8 +5,11 @@ import {
   doseKey,
   doseSizeFor,
   indexLog,
+  isMedicationActiveOnDay,
   lastNDayKeys,
+  mealRelationLabel,
   scheduledDosesForDate,
+  scheduleSummaryLabel,
   uniqueDoseTimes,
 } from '../adherence';
 import { toDayKey, todayKey } from '../date';
@@ -70,6 +73,52 @@ describe('scheduledDosesForDate', () => {
     expect(
       scheduledDosesForDate([m], indexLog([evt('m', todayK, '09:00', 'taken')]), todayK, todayK)[0].status,
     ).toBe('taken'));
+  test('PRN ilaçlar sabit doz çizelgesine dahil edilmez', () => {
+    const prnMed = med({ scheduleType: 'prn', doseTimes: ['09:00'], createdAt: isoAgo(5) });
+    expect(scheduledDosesForDate([prnMed], empty, todayK, todayK)).toHaveLength(0);
+  });
+});
+
+describe('isMedicationActiveOnDay & esnek takvimler', () => {
+  test('weekdays: sadece seçili günlerde aktiftir', () => {
+    // 2026-05-04 Pazartesi (getDay() = 1), 2026-05-05 Salı (getDay() = 2)
+    const m = med({
+      scheduleType: 'weekdays',
+      weekdays: [1, 3, 5],
+      createdAt: '2026-05-01T00:00:00.000Z',
+    });
+    expect(isMedicationActiveOnDay(m, '2026-05-04')).toBe(true);
+    expect(isMedicationActiveOnDay(m, '2026-05-05')).toBe(false);
+    expect(isMedicationActiveOnDay(m, '2026-05-06')).toBe(true);
+  });
+
+  test('interval: gün aşırı (2 günde bir) takvim doğru çalışır', () => {
+    const m = med({
+      scheduleType: 'interval',
+      intervalDays: 2,
+      intervalStartDate: '2026-05-01T00:00:00.000Z',
+      createdAt: '2026-05-01T00:00:00.000Z',
+    });
+    expect(isMedicationActiveOnDay(m, '2026-05-01')).toBe(true);
+    expect(isMedicationActiveOnDay(m, '2026-05-02')).toBe(false);
+    expect(isMedicationActiveOnDay(m, '2026-05-03')).toBe(true);
+    expect(isMedicationActiveOnDay(m, '2026-05-04')).toBe(false);
+  });
+
+  test('scheduleSummaryLabel ve mealRelationLabel Türkçe etiket üretir', () => {
+    expect(scheduleSummaryLabel(med({ scheduleType: 'daily' }))).toBe('Günde 1 adet');
+    expect(scheduleSummaryLabel(med({ scheduleType: 'prn' }))).toBe('İhtiyaç halinde (1 adet)');
+    expect(scheduleSummaryLabel(med({ scheduleType: 'interval', intervalDays: 2 }))).toBe(
+      'Gün aşırı · 1 adet',
+    );
+    expect(scheduleSummaryLabel(med({ scheduleType: 'weekdays', weekdays: [1, 4] }))).toBe(
+      'Pzt, Per · 1 adet',
+    );
+    expect(mealRelationLabel('before_meal')).toBe('Aç karnına');
+    expect(mealRelationLabel('after_meal')).toBe('Tok karnına');
+    expect(mealRelationLabel('with_meal')).toBe('Yemekle birlikte');
+    expect(mealRelationLabel('none')).toBeNull();
+  });
 });
 
 describe('adherenceSummary', () => {
@@ -102,3 +151,4 @@ describe('lastNDayKeys', () => {
     expect(k[0]).toBe(keyAgo(6));
   });
 });
+

@@ -1,15 +1,28 @@
-import React, { useMemo } from 'react';
-import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import {
+  Alert,
+  Linking,
+  Pressable,
+  ScrollView,
+  Share,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useData } from '@/store/DataContext';
 import { buildUrgencyList, isDepleted, UrgencyItem } from '@/utils/status';
-import { indexLog, scheduledDosesForDate } from '@/utils/adherence';
+import { ScheduledDose, indexLog, scheduledDosesForDate } from '@/utils/adherence';
+import { scheduleSnoozedDoseNotification } from '@/utils/notifications';
+import { buildPharmacyRenewalList } from '@/utils/report';
 import { formatTR, humanDays, todayKey } from '@/utils/date';
-import { colors, fontSize, spacing, statusBg, statusColor } from '@/theme';
-import { Card, EmptyState, Loading, StatusBadge, Button } from '@/components/ui';
+import { colors, fontSize, radius, spacing, statusBg, statusColor } from '@/theme';
+import { Card, EmptyState, Loading, ProgressBar, StatusBadge, Button } from '@/components/ui';
 import { DoseList } from '@/components/DoseList';
+
+type KindFilter = 'all' | 'stock' | 'report' | 'expiry';
 
 export default function DashboardScreen() {
   const {
@@ -26,25 +39,45 @@ export default function DashboardScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
+  const [selectedPatientId, setSelectedPatientId] = useState<string>('all');
+  const [kindFilter, setKindFilter] = useState<KindFilter>('all');
+
+  // Seçili hastaya göre ilaçları süz
+  const filteredMeds = useMemo(
+    () =>
+      selectedPatientId === 'all'
+        ? data.medications
+        : data.medications.filter((m) => m.patientId === selectedPatientId),
+    [data.medications, selectedPatientId],
+  );
+
   // Stoğu tükenmiş (takip edilen) ilaçlar — en üstte ayrı, eyleme dönük kategori.
   const depletedMeds = useMemo(
-    () => data.medications.filter(isDepleted),
-    [data.medications],
+    () => filteredMeds.filter(isDepleted),
+    [filteredMeds],
   );
-  const items = useMemo(() => {
+  const allItems = useMemo(() => {
     const depletedIds = new Set(depletedMeds.map((m) => m.id));
     // Tükenen stok kalemlerini "Dikkat gerekenler"den çıkar (Tükendi'de gösterilir).
-    return buildUrgencyList(data.medications, data.settings.warnDaysBefore).filter(
+    return buildUrgencyList(filteredMeds, data.settings.warnDaysBefore).filter(
       (it) => !(it.kind === 'stock' && depletedIds.has(it.medication.id)),
     );
-  }, [data.medications, data.settings.warnDaysBefore, depletedMeds]);
+  }, [filteredMeds, data.settings.warnDaysBefore, depletedMeds]);
 
-  // Bugün alınacak dozlar (yalnızca doz saati tanımlı ilaçlar).
+  const items = useMemo(
+    () =>
+      kindFilter === 'all'
+        ? allItems
+        : allItems.filter((it) => it.kind === kindFilter),
+    [allItems, kindFilter],
+  );
+
+  // Bugün alınacak dozlar (yalnızca doz saati tanımlı ve bugün aktif ilaçlar).
   const todayK = todayKey();
   const todayDoses = useMemo(() => {
     const logByKey = indexLog(data.doseLog);
-    return scheduledDosesForDate(data.medications, logByKey, todayK, todayK);
-  }, [data.medications, data.doseLog, todayK]);
+    return scheduledDosesForDate(filteredMeds, logByKey, todayK, todayK);
+  }, [filteredMeds, data.doseLog, todayK]);
   const takenToday = todayDoses.filter((d) => d.status === 'taken').length;
   const patientsById = useMemo(
     () => new Map(data.patients.map((p) => [p.id, p.fullName])),
@@ -64,13 +97,66 @@ export default function DashboardScreen() {
   const upcoming = okItems.slice(0, UPCOMING_LIMIT);
   const hiddenCount = okItems.length - upcoming.length;
 
+  async function handleSnoozeDose(dose: ScheduledDose, minutes: number) {
+    const ok = await scheduleSnoozedDoseNotification({
+      medicationId: dose.med.id,
+      medName: dose.med.name,
+      patientId: dose.med.patientId,
+      patientName: patientsById.get(dose.med.patientId),
+      minutes,
+      hideSensitive: data.settings.hideSensitiveNotifications,
+    });
+    if (ok) {
+      Alert.alert(
+        'Ertelendi',
+        `${dose.med.name} için ${minutes} dakika sonra hatırlatma gönderilecek.`,
+      );
+    } else {
+      Alert.alert(
+        'Bildirim kurulamadı',
+        'Hatırlatma kurmak için bildirim izninin açık olduğundan emin olun.',
+      );
+    }
+  }
+
+  function handleShareRenewalList() {
+    const targetPatients =
+      selectedPatientId === 'all'
+        ? data.patients
+        : data.patients.filter((p) => p.id === selectedPatientId);
+    const text = buildPharmacyRenewalList(
+      targetPatients,
+      filteredMeds,
+      data.settings.warnDaysBefore,
+    );
+    Alert.alert(
+      'Reçete / Eczane Listesi Paylaş',
+      'Biten veya yakında bitecek ilaç ve raporların listesi düz metin olarak paylaşılacak.',
+      [
+        { text: 'Vazgeç', style: 'cancel' },
+        {
+          text: 'Paylaş',
+          onPress: async () => {
+            try {
+              await Share.share({
+                title: 'Reçete / Eczane Yenileme Listesi',
+                message: text,
+              });
+            } catch {
+              Alert.alert('Paylaşılamadı', 'Liste paylaşılırken bir sorun oluştu.');
+            }
+          },
+        },
+      ],
+    );
+  }
+
   if (loading) return <Loading />;
 
   // Depo okunamadı/bozuktu: kurtarılabilir veriyi ezmemek için kayıt durduruldu.
-  // Yanıltıcı "hasta yok" boş durumu yerine net bir uyarı göster.
   if (loadFailed) {
     return (
-      <View style={styles.center}>
+      <View style={[styles.center, { backgroundColor: colors.bg }]}>
         <EmptyState
           icon="warning-outline"
           title="Verilere şu an erişilemedi"
@@ -89,7 +175,7 @@ export default function DashboardScreen() {
 
   if (data.patients.length === 0) {
     return (
-      <View style={styles.center}>
+      <View style={[styles.center, { backgroundColor: colors.bg }]}>
         <EmptyState
           icon="medkit-outline"
           title="Henüz hasta eklenmedi"
@@ -101,19 +187,27 @@ export default function DashboardScreen() {
 
   return (
     <ScrollView
-      style={styles.container}
-      contentContainerStyle={{ padding: spacing.lg, paddingBottom: insets.bottom + spacing.xl }}
+      style={[styles.container, { backgroundColor: colors.bg }]}
+      contentContainerStyle={{
+        padding: spacing.lg,
+        paddingBottom: insets.bottom + spacing.xl,
+      }}
     >
       {/* Bildirim izni ayar "açık" ama sistemde kapalıysa: sessiz arıza uyarısı */}
       {data.settings.notificationsEnabled && !notificationsGranted ? (
         <Pressable
           onPress={() => Linking.openSettings()}
-          style={styles.permBanner}
+          style={[styles.permBanner, { backgroundColor: colors.dangerBg }]}
           accessibilityRole="button"
           accessibilityLabel="Bildirim izni kapalı. Hatırlatmalar gelmiyor. Açmak için telefon ayarlarını açın."
         >
           <Ionicons name="notifications-off-outline" size={22} color={colors.danger} />
-          <Text style={styles.permBannerText}>
+          <Text
+            style={[
+              styles.permBannerText,
+              { color: colors.danger, fontSize: fontSize.sm },
+            ]}
+          >
             Bildirim izni kapalı — hatırlatmalar gelmiyor. Açmak için dokunun.
           </Text>
         </Pressable>
@@ -122,32 +216,63 @@ export default function DashboardScreen() {
       {saveFailed ? (
         <Pressable
           onPress={() => {
-            void retrySave().then((ok) => {
-              if (!ok) {
-                /* banner kalır */
-              }
-            });
+            void retrySave();
           }}
-          style={styles.permBanner}
+          style={[styles.permBanner, { backgroundColor: colors.dangerBg }]}
           accessibilityRole="button"
           accessibilityLabel="Kayıt başarısız. Tekrar denemek için dokunun."
         >
           <Ionicons name="save-outline" size={22} color={colors.danger} />
-          <Text style={styles.permBannerText}>
+          <Text
+            style={[
+              styles.permBannerText,
+              { color: colors.danger, fontSize: fontSize.sm },
+            ]}
+          >
             Son değişiklikler kaydedilemedi. Tekrar denemek için dokunun veya
             yedek alın.
           </Text>
         </Pressable>
       ) : null}
 
-      {/* Cihaz/bütçe sınırı: bazı hatırlatmalar planlanamadı (sessiz düşürme yerine uyar) */}
+      {/* Cihaz/bütçe sınırı: bazı hatırlatmalar planlanamadı */}
       {notifDropped > 0 ? (
-        <View style={styles.dropBanner}>
+        <View style={[styles.dropBanner, { backgroundColor: colors.warningBg }]}>
           <Ionicons name="warning-outline" size={20} color={colors.warning} />
-          <Text style={styles.dropBannerText}>
+          <Text
+            style={[
+              styles.dropBannerText,
+              { color: colors.warning, fontSize: fontSize.sm },
+            ]}
+          >
             {notifDropped} hatırlatma cihaz sınırı nedeniyle planlanamadı. İlaç
             saati sayısını azaltmayı veya uyarı gününü düşürmeyi deneyin.
           </Text>
+        </View>
+      ) : null}
+
+      {/* Çok hastalı filtre çipleri */}
+      {data.patients.length > 1 ? (
+        <View style={styles.filterGroup}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.filterRow}
+          >
+            <FilterChip
+              label="Tüm Hastalar"
+              active={selectedPatientId === 'all'}
+              onPress={() => setSelectedPatientId('all')}
+            />
+            {data.patients.map((p) => (
+              <FilterChip
+                key={p.id}
+                label={p.fullName}
+                active={selectedPatientId === p.id}
+                onPress={() => setSelectedPatientId(p.id)}
+              />
+            ))}
+          </ScrollView>
         </View>
       ) : null}
 
@@ -156,7 +281,12 @@ export default function DashboardScreen() {
         <View style={styles.todaySection}>
           <View style={styles.headingRow}>
             <Ionicons name="alert-circle" size={20} color={colors.danger} />
-            <Text style={[styles.heading, { color: colors.danger }]}>
+            <Text
+              style={[
+                styles.heading,
+                { color: colors.danger, fontSize: fontSize.lg },
+              ]}
+            >
               Tükendi — hemen yenileyin ({depletedMeds.length})
             </Text>
           </View>
@@ -169,11 +299,22 @@ export default function DashboardScreen() {
                   color={colors.danger}
                   style={{ marginRight: 6, marginTop: 3 }}
                 />
-                <Text style={styles.rowMed} numberOfLines={2}>
+                <Text
+                  style={[
+                    styles.rowMed,
+                    { color: colors.text, fontSize: fontSize.lg },
+                  ]}
+                  numberOfLines={2}
+                >
                   {m.name}
                 </Text>
               </View>
-              <Text style={styles.rowPatient}>
+              <Text
+                style={[
+                  styles.rowPatient,
+                  { color: colors.textMuted, fontSize: fontSize.md },
+                ]}
+              >
                 {getPatient(m.patientId)?.fullName ?? 'Hasta'}
               </Text>
               <StatusBadge level="danger" label="Stok bitti · yenile" />
@@ -185,18 +326,81 @@ export default function DashboardScreen() {
       {/* Bugün alınacak dozlar — günlük asıl eylem */}
       {todayDoses.length > 0 ? (
         <View style={styles.todaySection}>
-          <View style={styles.headingRow}>
-            <Ionicons name="time" size={20} color={colors.primary} />
-            <Text style={styles.heading}>
-              Bugün — dozlar ({takenToday}/{todayDoses.length})
-            </Text>
-          </View>
+          <Card style={{ marginBottom: spacing.md }}>
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                marginBottom: spacing.sm,
+              }}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Ionicons name="time" size={20} color={colors.primary} />
+                <Text
+                  style={[
+                    styles.heading,
+                    { color: colors.text, fontSize: fontSize.lg },
+                  ]}
+                >
+                  Bugünkü Doz İlerlemesi
+                </Text>
+              </View>
+              <Text
+                style={{
+                  color: colors.primary,
+                  fontSize: fontSize.lg,
+                  fontWeight: '900',
+                }}
+              >
+                {takenToday}/{todayDoses.length}
+              </Text>
+            </View>
+            <ProgressBar
+              progress={todayDoses.length > 0 ? takenToday / todayDoses.length : 0}
+              color={takenToday === todayDoses.length ? colors.ok : colors.primary}
+              height={10}
+            />
+          </Card>
           <DoseList
             doses={todayDoses}
             dayKey={todayK}
             patientsById={patientsById}
             onSet={setDoseStatus}
+            onSnooze={handleSnoozeDose}
           />
+        </View>
+      ) : null}
+
+      {/* Kategori filtresi (Stok / Rapor / Son Kullanma) */}
+      {allItems.length > 0 ? (
+        <View style={styles.filterGroup}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.filterRow}
+          >
+            <FilterChip
+              label="Tümü"
+              active={kindFilter === 'all'}
+              onPress={() => setKindFilter('all')}
+            />
+            <FilterChip
+              label="İlaç Stoğu"
+              active={kindFilter === 'stock'}
+              onPress={() => setKindFilter('stock')}
+            />
+            <FilterChip
+              label="Rapor"
+              active={kindFilter === 'report'}
+              onPress={() => setKindFilter('report')}
+            />
+            <FilterChip
+              label="Son Kullanma"
+              active={kindFilter === 'expiry'}
+              onPress={() => setKindFilter('expiry')}
+            />
+          </ScrollView>
         </View>
       ) : null}
 
@@ -207,11 +411,29 @@ export default function DashboardScreen() {
         <SummaryBox count={counts.caution} label="Takipte" level="caution" />
       </View>
 
+      {/* Reçete / Eczane Listesi Paylaş düğmesi */}
+      {depletedMeds.length > 0 || attention.length > 0 ? (
+        <Button
+          title="Reçete / Eczane Listesi Paylaş"
+          icon="share-social-outline"
+          variant="secondary"
+          onPress={handleShareRenewalList}
+          style={{ marginBottom: spacing.lg }}
+        />
+      ) : null}
+
       {attention.length > 0 ? (
         <>
           <View style={styles.headingRow}>
             <Ionicons name="alert-circle" size={20} color={colors.warning} />
-            <Text style={styles.heading}>Dikkat gerekenler</Text>
+            <Text
+              style={[
+                styles.heading,
+                { color: colors.text, fontSize: fontSize.lg },
+              ]}
+            >
+              Dikkat gerekenler
+            </Text>
           </View>
           {attention.map((item) => (
             <UrgencyRow
@@ -226,9 +448,21 @@ export default function DashboardScreen() {
         <Card>
           <View style={styles.headingRow}>
             <Ionicons name="checkmark-circle" size={20} color={colors.ok} />
-            <Text style={styles.allGood}>Şu an acil bir durum yok.</Text>
+            <Text
+              style={[
+                styles.allGood,
+                { color: colors.ok, fontSize: fontSize.lg },
+              ]}
+            >
+              Şu an acil bir durum yok.
+            </Text>
           </View>
-          <Text style={styles.allGoodSub}>
+          <Text
+            style={[
+              styles.allGoodSub,
+              { color: colors.textMuted, fontSize: fontSize.md },
+            ]}
+          >
             Tüm ilaç ve raporlarda yeterli süre var. Yaklaşanları aşağıda
             görebilirsiniz.
           </Text>
@@ -239,7 +473,14 @@ export default function DashboardScreen() {
         <>
           <View style={[styles.headingRow, { marginTop: spacing.lg }]}>
             <Ionicons name="calendar-outline" size={20} color={colors.text} />
-            <Text style={styles.heading}>Sıradaki bitişler</Text>
+            <Text
+              style={[
+                styles.heading,
+                { color: colors.text, fontSize: fontSize.lg },
+              ]}
+            >
+              Sıradaki bitişler
+            </Text>
           </View>
           {upcoming.map((item) => (
             <UrgencyRow
@@ -250,14 +491,19 @@ export default function DashboardScreen() {
             />
           ))}
           {hiddenCount > 0 ? (
-            <Text style={styles.moreNote}>
+            <Text
+              style={[
+                styles.moreNote,
+                { color: colors.textMuted, fontSize: fontSize.sm },
+              ]}
+            >
               + {hiddenCount} kayıt daha (hasta detayında görünür)
             </Text>
           ) : null}
         </>
       ) : null}
 
-      {items.length === 0 ? (
+      {filteredMeds.length === 0 ? (
         <EmptyState
           icon="list-outline"
           title="İlaç eklenmemiş"
@@ -265,6 +511,42 @@ export default function DashboardScreen() {
         />
       ) : null}
     </ScrollView>
+  );
+}
+
+function FilterChip({
+  label,
+  active,
+  onPress,
+}: {
+  label: string;
+  active: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={[
+        styles.filterChip,
+        active
+          ? { backgroundColor: colors.primary, borderColor: colors.primary }
+          : { backgroundColor: colors.card, borderColor: colors.border },
+      ]}
+      accessibilityRole="button"
+      accessibilityState={{ selected: active }}
+    >
+      <Text
+        style={[
+          styles.filterChipText,
+          {
+            color: active ? colors.white : colors.text,
+            fontSize: fontSize.sm,
+          },
+        ]}
+      >
+        {label}
+      </Text>
+    </Pressable>
   );
 }
 
@@ -279,10 +561,20 @@ function SummaryBox({
 }) {
   return (
     <View style={[styles.summaryBox, { backgroundColor: statusBg[level] }]}>
-      <Text style={[styles.summaryCount, { color: statusColor[level] }]}>
+      <Text
+        style={[
+          styles.summaryCount,
+          { color: statusColor[level], fontSize: fontSize.xxl },
+        ]}
+      >
         {count}
       </Text>
-      <Text style={[styles.summaryLabel, { color: statusColor[level] }]}>
+      <Text
+        style={[
+          styles.summaryLabel,
+          { color: statusColor[level], fontSize: fontSize.sm },
+        ]}
+      >
         {label}
       </Text>
     </View>
@@ -319,14 +611,34 @@ function UrgencyRow({
           color={colors.text}
           style={{ marginRight: 6, marginTop: 3 }}
         />
-        <Text style={styles.rowMed} numberOfLines={2}>
+        <Text
+          style={[
+            styles.rowMed,
+            { color: colors.text, fontSize: fontSize.lg },
+          ]}
+          numberOfLines={2}
+        >
           {item.medication.name}
         </Text>
       </View>
-      <Text style={styles.rowPatient}>{patientName}</Text>
+      <Text
+        style={[
+          styles.rowPatient,
+          { color: colors.textMuted, fontSize: fontSize.md },
+        ]}
+      >
+        {patientName}
+      </Text>
       <View style={styles.rowBottom}>
         <StatusBadge level={item.level} label={prefix + humanDays(item.daysLeft)} />
-        <Text style={styles.rowDate}>{formatTR(item.date)}</Text>
+        <Text
+          style={[
+            styles.rowDate,
+            { color: colors.textMuted, fontSize: fontSize.sm },
+          ]}
+        >
+          {formatTR(item.date)}
+        </Text>
       </View>
     </Card>
   );
@@ -365,6 +677,15 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: fontSize.sm,
   },
+  filterGroup: { marginBottom: spacing.md },
+  filterRow: { flexDirection: 'row', gap: spacing.sm },
+  filterChip: {
+    paddingVertical: 8,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.pill,
+    borderWidth: 1.5,
+  },
+  filterChipText: { fontWeight: '700' },
   todaySection: { marginBottom: spacing.xl },
   summaryRow: { flexDirection: 'row', gap: spacing.md, marginBottom: spacing.lg },
   summaryBox: {
@@ -406,3 +727,4 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
 });
+

@@ -28,7 +28,8 @@ import {
   rescheduleAll,
 } from '../utils/notifications';
 import { createdDayKey, doseKey, doseSizeFor } from '../utils/adherence';
-import { roundUnits } from '../utils/date';
+import { roundUnits, todayKey } from '../utils/date';
+import { applyTheme } from '../theme';
 
 function genId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -53,6 +54,11 @@ interface DataContextValue {
   updatePatient: (id: string, patch: Partial<Patient>) => void;
   deletePatient: (id: string) => void;
   getPatient: (id: string) => Patient | undefined;
+  /**
+   * Bir hastanın bildirimlerini verilen saat süresi kadar geçici erteler (snooze).
+   * null verilirse ertelemeyi kaldırır.
+   */
+  snoozePatient: (id: string, hours: number | null) => void;
 
   // İlaç
   addMedication: (m: Omit<Medication, 'id' | 'createdAt'>) => string;
@@ -74,6 +80,10 @@ interface DataContextValue {
     time: string,
     status: 'taken' | 'skipped',
   ) => void;
+  /**
+   * İhtiyaç halinde (PRN) veya anlık ek doz alımını kaydeder ve stoktan düşer.
+   */
+  takePrnDose: (medId: string) => void;
 
   // Ayarlar
   updateSettings: (patch: Partial<Settings>) => void;
@@ -249,6 +259,19 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }));
   }, []);
 
+  const snoozePatient = useCallback((id: string, hours: number | null) => {
+    const snoozeUntil =
+      hours && hours > 0
+        ? new Date(Date.now() + hours * 3600 * 1000).toISOString()
+        : undefined;
+    setData((d) => ({
+      ...d,
+      patients: d.patients.map((p) =>
+        p.id === id ? { ...p, snoozeUntil } : p,
+      ),
+    }));
+  }, []);
+
   const deletePatient = useCallback((id: string) => {
     setData((d) => {
       const patient = d.patients.find((p) => p.id === id);
@@ -419,6 +442,41 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     [],
   );
 
+  const takePrnDose = useCallback((medId: string) => {
+    setData((d) => {
+      const med = d.medications.find((m) => m.id === medId);
+      if (!med) return d;
+      const now = new Date();
+      const hh = String(now.getHours()).padStart(2, '0');
+      const mm = String(now.getMinutes()).padStart(2, '0');
+      const ss = String(now.getSeconds()).padStart(2, '0');
+      const dayKey = todayKey();
+      const time = `PRN:${hh}:${mm}:${ss}`;
+      const key = doseKey(medId, dayKey, time);
+      const unitDose = med.dailyDose > 0 ? med.dailyDose : 1;
+      const applied = Math.min(unitDose, Math.max(0, med.stockUnits));
+      const stock = roundUnits(Math.max(0, med.stockUnits - applied));
+
+      const event: DoseEvent = {
+        id: key,
+        medId,
+        patientId: med.patientId,
+        dayKey,
+        time: `${hh}:${mm}`,
+        status: 'taken',
+        appliedUnits: roundUnits(applied),
+        loggedAt: now.toISOString(),
+      };
+      return {
+        ...d,
+        medications: d.medications.map((m) =>
+          m.id === medId ? { ...m, stockUnits: stock } : m,
+        ),
+        doseLog: [...d.doseLog, event],
+      };
+    });
+  }, []);
+
   // --- Ayarlar ---
   const updateSettings = useCallback((patch: Partial<Settings>) => {
     setData((d) => ({ ...d, settings: { ...d.settings, ...patch } }));
@@ -506,6 +564,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     return ok;
   }, []);
 
+  // Tema renklerini ve yazı tipi boyutunu her render'da senkron tut
+  applyTheme(data.settings);
+
   const value = useMemo<DataContextValue>(
     () => ({
       data,
@@ -519,6 +580,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       updatePatient,
       deletePatient,
       getPatient,
+      snoozePatient,
       addMedication,
       updateMedication,
       deleteMedication,
@@ -526,6 +588,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       medsForPatient,
       refillMedication,
       setDoseStatus,
+      takePrnDose,
       updateSettings,
       restoreData,
       canUndoRestore,
@@ -548,6 +611,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       updatePatient,
       deletePatient,
       getPatient,
+      snoozePatient,
       addMedication,
       updateMedication,
       deleteMedication,
@@ -555,6 +619,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       medsForPatient,
       refillMedication,
       setDoseStatus,
+      takePrnDose,
       updateSettings,
       restoreData,
       canUndoRestore,

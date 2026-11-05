@@ -1,12 +1,21 @@
 // Uyum (adherence) hesapları: planlı dozların türetilmesi ve istatistik.
 //
-// Model: yalnızca DOZ SAATİ (doseTimes) tanımlı ilaçlar günlük dozlara açılır;
-// her ilaç için bir saat-yuvası = bir planlı doz. Bir dozun durumu doz
-// günlüğündeki (DoseEvent) kayda göre belirlenir; kayıt yoksa geçmiş gün
-// "kaçırıldı" (missed), bugün/gelecek "bekliyor" (pending) sayılır.
+// Model: yalnızca DOZ SAATİ (doseTimes) tanımlı ve o gün aktif takvimi olan
+// ilaçlar günlük dozlara açılır; her ilaç için bir saat-yuvası = bir planlı doz.
+// Bir dozun durumu doz günlüğündeki (DoseEvent) kayda göre belirlenir; kayıt
+// yoksa geçmiş gün "kaçırıldı" (missed), bugün/gelecek "bekliyor" (pending) sayılır.
 
-import { DoseEvent, Medication } from '../types';
-import { addDays, parseISO, roundUnits, startOfDay, toDayKey } from './date';
+import { DoseEvent, MealRelation, Medication } from '../types';
+import {
+  addDays,
+  dayKeyToDate,
+  daysBetween,
+  formatDose,
+  parseISO,
+  roundUnits,
+  startOfDay,
+  toDayKey,
+} from './date';
 
 export type DoseStatus = 'taken' | 'skipped' | 'pending' | 'missed';
 
@@ -19,6 +28,60 @@ export interface ScheduledDose {
   /** `${medId}|${dayKey}|${time}` */
   key: string;
   status: DoseStatus;
+}
+
+/** Date.getDay() indeksine göre (0=Pazar .. 6=Cumartesi) Türkçe kısa gün adları. */
+export const WEEKDAY_SHORT_TR: readonly string[] = [
+  'Paz',
+  'Pzt',
+  'Sal',
+  'Çar',
+  'Per',
+  'Cum',
+  'Cmt',
+];
+
+/** UI gösterimi için Pazartesi'den Pazar'a sıralı gün indeksleri. */
+export const WEEKDAY_DISPLAY_ORDER: readonly number[] = [1, 2, 3, 4, 5, 6, 0];
+
+const MEAL_LABELS: Record<MealRelation, string> = {
+  none: '',
+  before_meal: 'Aç karnına',
+  after_meal: 'Tok karnına',
+  with_meal: 'Yemekle birlikte',
+};
+
+/** Yemek durumu etiketini Türkçe döndürür (yoksa veya 'none' ise null). */
+export function mealRelationLabel(meal?: MealRelation): string | null {
+  if (!meal || meal === 'none') return null;
+  return MEAL_LABELS[meal] || null;
+}
+
+/** İlacın kullanım sıklığını özetleyen Türkçe etiket. */
+export function scheduleSummaryLabel(med: Medication): string {
+  const type = med.scheduleType ?? 'daily';
+  const doseStr = `${formatDose(med.dailyDose)} adet`;
+  if (type === 'prn') {
+    return `İhtiyaç halinde (${doseStr})`;
+  }
+  if (type === 'weekdays') {
+    const days =
+      med.weekdays && med.weekdays.length > 0
+        ? WEEKDAY_DISPLAY_ORDER.filter((d) => med.weekdays!.includes(d)).map(
+            (d) => WEEKDAY_SHORT_TR[d],
+          )
+        : [];
+    if (days.length > 0 && days.length < 7) {
+      return `${days.join(', ')} · ${doseStr}`;
+    }
+    return `Günde ${doseStr}`;
+  }
+  if (type === 'interval') {
+    const n = med.intervalDays && med.intervalDays >= 2 ? Math.floor(med.intervalDays) : 2;
+    const prefix = n === 2 ? 'Gün aşırı' : `${n} günde bir`;
+    return `${prefix} · ${doseStr}`;
+  }
+  return `Günde ${doseStr}`;
 }
 
 /** Doz günlüğü anahtarı (DoseEvent.id ile aynı). */
@@ -37,6 +100,41 @@ export function createdDayKey(med: Medication): string {
   return toDayKey(parseISO(med.createdAt));
 }
 
+/**
+ * Bir ilacın belirli bir yerel günde ("YYYY-MM-DD") planlı alımı olup olmadığını
+ * belirler.
+ * - Oluşturulma gününden önce: false
+ * - 'prn' (ihtiyaç halinde): false (sabit günlük takvimi yok, kaçırıldı sayılmaz)
+ * - 'weekdays': haftanın seçili günlerinde true
+ * - 'interval': başlangıç gününden itibaren her N günde bir true
+ * - 'daily' (varsayılan): true
+ */
+export function isMedicationActiveOnDay(med: Medication, dayKey: string): boolean {
+  const createdKey = createdDayKey(med);
+  if (dayKey < createdKey) return false;
+
+  const type = med.scheduleType ?? 'daily';
+  if (type === 'prn') return false;
+
+  if (type === 'weekdays') {
+    if (!med.weekdays || med.weekdays.length === 0) return true;
+    const dow = dayKeyToDate(dayKey).getDay();
+    return med.weekdays.includes(dow);
+  }
+
+  if (type === 'interval') {
+    const n =
+      med.intervalDays && med.intervalDays >= 2 ? Math.floor(med.intervalDays) : 2;
+    const anchorKey = med.intervalStartDate
+      ? toDayKey(parseISO(med.intervalStartDate))
+      : createdKey;
+    const diff = daysBetween(dayKeyToDate(anchorKey), dayKeyToDate(dayKey));
+    return diff >= 0 && diff % n === 0;
+  }
+
+  return true;
+}
+
 /** Bir saat-yuvası için doz miktarı: günlük toplam / (benzersiz) saat sayısı. */
 export function doseSizeFor(med: Medication): number {
   const n = uniqueDoseTimes(med).length || 1;
@@ -49,8 +147,8 @@ export function indexLog(doseLog: DoseEvent[]): Map<string, DoseEvent> {
 }
 
 /**
- * Belirli bir gün için planlı dozları üretir (yalnızca doseTimes olan ilaçlar).
- * Saate göre sıralı döner.
+ * Belirli bir gün için planlı dozları üretir (yalnızca doseTimes olan ve o gün
+ * takvimde aktif olan ilaçlar). Saate göre sıralı döner.
  */
 export function scheduledDosesForDate(
   meds: Medication[],
@@ -62,9 +160,8 @@ export function scheduledDosesForDate(
   for (const med of meds) {
     const times = uniqueDoseTimes(med);
     if (times.length === 0) continue;
-    // İlaç o günden önce HENÜZ YOKTU: doz üretme (özet ile aynı kural —
-    // takvim/dökümde sahte "kaçırıldı" göstermemek için).
-    if (dayKey < createdDayKey(med)) continue;
+    // İlaç o günden önce henüz yoktu ya da o gün takvimde aktif değil:
+    if (!isMedicationActiveOnDay(med, dayKey)) continue;
     const size = doseSizeFor(med);
     for (const time of times) {
       const key = doseKey(med.id, dayKey, time);
@@ -105,8 +202,8 @@ const EMPTY_SUMMARY: AdherenceSummary = {
 
 /**
  * Verilen gün anahtarları için uyum özeti. Bir ilaç, oluşturulduğu günden
- * önceki günlerde sayılmaz. Bugünün işaretlenmemiş dozları "missed" sayılmaz
- * (henüz bekliyor).
+ * önceki günlerde ve takviminde aktif olmadığı günlerde sayılmaz. Bugünün
+ * işaretlenmemiş dozları "missed" sayılmaz (henüz bekliyor).
  */
 export function adherenceSummary(
   meds: Medication[],
@@ -120,10 +217,9 @@ export function adherenceSummary(
   for (const med of meds) {
     const times = uniqueDoseTimes(med);
     if (times.length === 0) continue;
-    const createdKey = createdDayKey(med);
     for (const dayKey of dayKeys) {
-      if (dayKey < createdKey) continue;
       if (dayKey > todayK) continue;
+      if (!isMedicationActiveOnDay(med, dayKey)) continue;
       for (const time of times) {
         const ev = logByKey.get(doseKey(med.id, dayKey, time));
         if (ev?.status === 'taken') taken++;
@@ -170,3 +266,4 @@ export function lastNDayKeys(n: number): string[] {
   }
   return keys;
 }
+

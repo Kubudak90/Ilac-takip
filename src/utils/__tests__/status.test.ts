@@ -2,7 +2,9 @@ import type { Medication } from '../../types';
 import {
   currentRemainingUnits,
   daysUntilStockOut,
+  effectiveDailyDose,
   isDepleted,
+  isExpired,
   levelForDays,
   stockRunOutDate,
 } from '../status';
@@ -44,9 +46,44 @@ describe('stok = gerçek sayım (tahmini azalma yok)', () => {
   test('dailyDose<=0 -> hesaplanamaz (null)', () => {
     expect(stockRunOutDate(med({ dailyDose: 0, stockUnits: 5 }))).toBeNull();
   });
+
+  test('gün aşırı (interval=2) stok bitiş süresini iki katına çıkarır', () => {
+    const m = med({
+      trackStock: true,
+      stockUnits: 10,
+      dailyDose: 1,
+      scheduleType: 'interval',
+      intervalDays: 2,
+    });
+    expect(effectiveDailyDose(m)).toBe(0.5);
+    expect(daysUntilStockOut(m)).toBe(20);
+  });
+
+  test('haftanın belirli günleri (weekdays) stok bitişini doğru hesaplar', () => {
+    const m = med({
+      trackStock: true,
+      stockUnits: 6,
+      dailyDose: 1,
+      scheduleType: 'weekdays',
+      weekdays: [1, 3, 5], // haftada 3 gün
+    });
+    expect(effectiveDailyDose(m)).toBeCloseTo(3 / 7);
+    expect(daysUntilStockOut(m)).toBe(14);
+  });
+
+  test('PRN ilaçlar için sabit stok bitiş tarihi hesaplanmaz', () => {
+    const m = med({
+      trackStock: true,
+      stockUnits: 10,
+      dailyDose: 1,
+      scheduleType: 'prn',
+    });
+    expect(effectiveDailyDose(m)).toBe(0);
+    expect(stockRunOutDate(m)).toBeNull();
+  });
 });
 
-describe('isDepleted (tükendi yalnız takip edilen ilaçta)', () => {
+describe('isDepleted ve isExpired', () => {
   test('tracked + stok 0 -> tükendi', () =>
     expect(isDepleted(med({ trackStock: true, stockUnits: 0 }))).toBe(true));
   test('tracked + stok 5 -> değil', () =>
@@ -55,6 +92,11 @@ describe('isDepleted (tükendi yalnız takip edilen ilaçta)', () => {
     expect(isDepleted(med({ stockUnits: 0 }))).toBe(false));
   test('tracked + dailyDose 0 -> değil', () =>
     expect(isDepleted(med({ trackStock: true, dailyDose: 0, stockUnits: 0 }))).toBe(false));
+  test('SKT geçmiş ilaç isExpired -> true, gelecekte -> false', () => {
+    expect(isExpired(med({ expiryDate: isoAgo(2) }))).toBe(true);
+    expect(isExpired(med({ expiryDate: isoAgo(-10) }))).toBe(false);
+    expect(isExpired(med({}))).toBe(false);
+  });
 });
 
 describe('levelForDays aciliyet eşikleri (warnDays=7)', () => {
@@ -68,3 +110,4 @@ describe('levelForDays aciliyet eşikleri (warnDays=7)', () => {
   });
   test('null -> ok', () => expect(levelForDays(null, 7)).toBe('ok'));
 });
+

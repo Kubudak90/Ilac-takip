@@ -1,14 +1,23 @@
 import React, { useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet } from 'react-native';
+import {
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useData } from '@/store/DataContext';
-import { colors, spacing } from '@/theme';
+import { colors, fontSize, radius, spacing } from '@/theme';
 import { Button } from '@/components/ui';
 import { NumberField, SwitchField, TextField } from '@/components/forms';
+import { isPatientSnoozed } from '@/utils/notificationPlan';
 
 export default function EditPatientScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
-  const { getPatient, addPatient, updatePatient } = useData();
+  const { getPatient, addPatient, updatePatient, snoozePatient } = useData();
   const router = useRouter();
 
   const existing = id ? getPatient(id) : undefined;
@@ -20,6 +29,8 @@ export default function EditPatientScreen() {
   const [muteNotifications, setMuteNotifications] = useState(
     !!existing?.muteNotifications,
   );
+
+  const snoozed = existing ? isPatientSnoozed(existing) : false;
 
   function onSave() {
     const name = fullName.trim();
@@ -36,6 +47,7 @@ export default function EditPatientScreen() {
       birthYear: validBirthYear,
       notes: notes.trim(),
       muteNotifications,
+      snoozeUntil: existing?.snoozeUntil,
     };
     if (isEdit && existing) {
       updatePatient(existing.id, payload);
@@ -47,7 +59,7 @@ export default function EditPatientScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={styles.container}
+      style={[styles.container, { backgroundColor: colors.bg }]}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <Stack.Screen options={{ title: isEdit ? 'Hastayı Düzenle' : 'Yeni Hasta' }} />
@@ -77,6 +89,30 @@ export default function EditPatientScreen() {
           value={muteNotifications}
           onValueChange={setMuteNotifications}
         />
+        {isEdit && existing && snoozed ? (
+          <View
+            style={[
+              styles.snoozeNotice,
+              { backgroundColor: colors.warningBg, borderColor: colors.warning },
+            ]}
+          >
+            <Text style={{ flex: 1, fontSize: fontSize.sm, color: colors.text }}>
+              Geçici bildirim ertelemesi aktif (
+              {new Date(existing.snoozeUntil!).toLocaleString('tr-TR', {
+                day: '2-digit',
+                month: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+              })}
+              ).
+            </Text>
+            <Button
+              title="Ertelemeyi Kaldır"
+              variant="secondary"
+              onPress={() => snoozePatient(existing.id, null)}
+            />
+          </View>
+        ) : null}
         <Button title={isEdit ? 'Kaydet' : 'Hastayı Ekle'} onPress={onSave} />
       </ScrollView>
     </KeyboardAvoidingView>
@@ -84,5 +120,15 @@ export default function EditPatientScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.bg },
+  container: { flex: 1 },
+  snoozeNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing.md,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    marginBottom: spacing.lg,
+    gap: 8,
+  },
 });
+

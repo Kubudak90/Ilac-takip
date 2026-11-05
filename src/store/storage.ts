@@ -112,6 +112,9 @@ function isFiniteNumber(n: unknown): n is number {
   return typeof n === 'number' && Number.isFinite(n);
 }
 
+const VALID_SCHEDULES = new Set(['daily', 'weekdays', 'interval', 'prn']);
+const VALID_MEALS = new Set(['none', 'before_meal', 'after_meal', 'with_meal']);
+
 /** Yüklenen kaydı güvenli hale getirir: geçersiz alanları temizler/sınırlar. */
 function sanitize(parsed: Partial<AppData>): AppData {
   const patients: Patient[] = Array.isArray(parsed.patients)
@@ -123,6 +126,10 @@ function sanitize(parsed: Partial<AppData>): AppData {
         .map((p) => ({
           ...p,
           muteNotifications: !!p.muteNotifications,
+          snoozeUntil:
+            typeof p.snoozeUntil === 'string' && p.snoozeUntil.length > 0
+              ? p.snoozeUntil
+              : undefined,
         }))
     : [];
   const patientIds = new Set(patients.map((p) => p.id));
@@ -150,6 +157,35 @@ function sanitize(parsed: Partial<AppData>): AppData {
             typeof m.trackStock === 'boolean'
               ? m.trackStock
               : isFiniteNumber(m.stockUnits) && m.stockUnits > 0,
+          scheduleType:
+            typeof m.scheduleType === 'string' && VALID_SCHEDULES.has(m.scheduleType)
+              ? m.scheduleType
+              : undefined,
+          weekdays: Array.isArray(m.weekdays)
+            ? Array.from(
+                new Set(
+                  m.weekdays.filter(
+                    (w): w is number =>
+                      typeof w === 'number' &&
+                      Number.isInteger(w) &&
+                      w >= 0 &&
+                      w <= 6,
+                  ),
+                ),
+              ).sort()
+            : undefined,
+          intervalDays:
+            isFiniteNumber(m.intervalDays) && Math.floor(m.intervalDays) >= 2
+              ? Math.floor(m.intervalDays)
+              : undefined,
+          intervalStartDate:
+            typeof m.intervalStartDate === 'string' && m.intervalStartDate.length > 0
+              ? m.intervalStartDate
+              : undefined,
+          mealRelation:
+            typeof m.mealRelation === 'string' && VALID_MEALS.has(m.mealRelation)
+              ? m.mealRelation
+              : undefined,
         }))
         // Sahibi silinmiş ilaçları düşür (sızıntıyı önle)
         .filter((m) => patientIds.has(m.patientId))
