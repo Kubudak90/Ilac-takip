@@ -15,7 +15,13 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.ilactakip.app"
+      "bundleIdentifier": "com.ilactakip.app",
+      "buildNumber": "1",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSCameraUsageDescription": "İlaç kutusundaki karekodu okuyabilmek için kamera erişimi gerekir.",
+        "NSFaceIDUsageDescription": "Uygulama kilidini açmak için Face ID kullanılır."
+      }
     },
     "android": {
       "package": "com.ilactakip.app",
